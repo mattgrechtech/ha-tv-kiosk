@@ -33,7 +33,7 @@ class HaBridge(
         fun onConnectionStatus(status: String)
         fun onFrontendLoaded()
         fun onShowSettings()
-        fun onAuthFailed(message: String)
+        fun onAuthFailed(failure: HaAuth.Failure)
     }
 
     private val main = Handler(Looper.getMainLooper())
@@ -135,7 +135,7 @@ class HaBridge(
                 val body = JSONObject().put("access_token", token.accessToken).put("expires_in", token.expiresInSeconds)
                 "window.$AUTH_CALLBACK(true, $body);"
             } catch (e: HaAuth.Failure) {
-                main.post { events.onAuthFailed(e.message ?: "Sign-in failed") }
+                main.post { events.onAuthFailed(e) }
                 "window.$AUTH_CALLBACK(false);"
             }
             main.post { evaluate(js) }
@@ -149,7 +149,7 @@ class HaBridge(
             auth.signOut()
             main.post {
                 evaluate("window.$REVOKE_CALLBACK(true);")
-                events.onAuthFailed("Signed out from Home Assistant: open settings to sign in again")
+                events.onAuthFailed(HaAuth.Failure.Invalid("Signed out from Home Assistant on this TV."))
             }
         }
     }

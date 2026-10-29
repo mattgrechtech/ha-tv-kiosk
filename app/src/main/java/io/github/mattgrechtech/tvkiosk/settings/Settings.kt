@@ -31,8 +31,8 @@ object Keys {
     val START_URL = Key("start_url", "", check = ::url)
     /** Home Assistant base URL. Empty means "the origin of the start URL". */
     val HA_URL = Key("ha_url", "", check = ::url)
-    /** none: the page handles login (or trusted_networks); login: sign in once in the app; token: long-lived token. */
-    val AUTH_MODE = Key("auth_mode", "none", check = { if (it in AUTH_MODES) null else "must be one of $AUTH_MODES" })
+    /** login: sign in once in the app (default); token: long-lived token; none: the page handles login. */
+    val AUTH_MODE = Key("auth_mode", "login", check = { if (it in AUTH_MODES) null else "must be one of $AUTH_MODES" })
     val HA_KIOSK_MODE = Key("ha_kiosk_mode", true)
     val KEEP_SCREEN_ON = Key("keep_screen_on", true)
     val BOOT_START = Key("boot_start", false)

@@ -47,6 +47,23 @@ object Dialogs {
             .show()
     }
 
+    /** Asks for one line of text; [onOk] gets it trimmed. */
+    fun input(activity: Activity, title: String, message: String, password: Boolean = false, onOk: (String) -> Unit) {
+        if (activity.isFinishing) return
+        val field = EditText(activity).apply {
+            inputType = InputType.TYPE_CLASS_TEXT or
+                (if (password) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_VARIATION_NORMAL)
+            setSingleLine(true)
+        }
+        AlertDialog.Builder(activity)
+            .setTitle(title)
+            .setMessage(message)
+            .setView(field)
+            .setPositiveButton(android.R.string.ok) { _, _ -> onOk(field.text.toString().trim()) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
     /** Runs [onOk] straight away when no PIN is set, otherwise after the right PIN is entered. */
     fun requirePin(activity: Activity, pin: String, onOk: () -> Unit) {
         if (pin.isEmpty()) {

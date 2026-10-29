@@ -25,7 +25,7 @@ class SettingsTest {
         assertEquals("", settings[Keys.START_URL])
         assertEquals(2424, settings[Keys.API_PORT])
         assertTrue(settings[Keys.API_ENABLED])
-        assertEquals("none", settings[Keys.AUTH_MODE])
+        assertEquals("login", settings[Keys.AUTH_MODE])
     }
 
     @Test fun secretsGoToTheSecretStore() {
@@ -96,7 +96,7 @@ class SettingsTest {
         assertEquals(2500, settings[Keys.API_PORT])
         assertTrue(settings[Keys.MQTT_ENABLED])
         assertFalse(settings[Keys.KEEP_SCREEN_ON])
-        assertEquals("none", settings[Keys.AUTH_MODE])
+        assertEquals("login", settings[Keys.AUTH_MODE])
     }
 
     @Test fun importRoundTripsAnExport() {

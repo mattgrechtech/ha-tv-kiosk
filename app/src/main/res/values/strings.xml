@@ -3,10 +3,6 @@
     <!-- Working name: change it here, in tools/make_assets.py (banner text) and in the README. -->
     <string name="app_name">TV Kiosk</string>
 
-    <string name="status_no_url">No dashboard set yet.\nHold OK (or press Menu) to open settings.</string>
-    <string name="status_retrying">Can\'t load the dashboard: %1$s\n\nTrying again in %2$d s…</string>
-    <string name="status_auth_invalid">Home Assistant rejected this TV\'s sign-in.\nHold OK → Settings to sign in again.</string>
-
     <string name="menu_reload">Reload</string>
     <string name="menu_pointer_on">Pointer on</string>
     <string name="menu_pointer_off">Pointer off</string>
@@ -26,7 +22,6 @@
     <string name="settings_not_saved">Not saved</string>
     <string name="settings_sign_in">Sign in to Home Assistant</string>
     <string name="settings_sign_out">Sign out</string>
-    <string name="settings_signed_out">Signed out</string>
     <string name="settings_show_token">Show API address and token</string>
     <string name="settings_new_token">New API token</string>
     <string name="settings_overlay_permission">Allow pop-ups over other apps</string>
@@ -44,11 +39,6 @@
     <string name="label_start_url">Start URL</string>
     <string name="label_ha_url">Home Assistant URL (optional)</string>
     <string name="hint_ha_url">Empty: the start URL\'s address</string>
-    <string name="label_auth_mode">Sign-in</string>
-    <string name="auth_none">The page handles it (login page or trusted_networks)</string>
-    <string name="auth_login">Sign in once on this TV (recommended)</string>
-    <string name="auth_token">Long-lived access token</string>
-    <string name="label_ha_token">Long-lived access token</string>
     <string name="label_ha_kiosk_mode">Hide Home Assistant\'s header and sidebar</string>
     <string name="label_keep_screen_on">Keep the screen on while the dashboard shows</string>
     <string name="label_boot_start">Open the dashboard at boot</string>
@@ -80,11 +70,52 @@
     <string name="export_done">Saved to %1$s (without secrets).\n\nCopy it with: adb pull %1$s</string>
     <string name="import_missing">No file at %1$s.\n\nCopy one there with: adb push settings.json %1$s</string>
 
-    <string name="login_no_url">Set the start URL or Home Assistant URL first</string>
-    <string name="login_failed">Sign-in failed</string>
-    <string name="login_bad_redirect">Home Assistant sent back an unexpected answer. Try again.</string>
-    <string name="login_done">Signed in to Home Assistant</string>
-
     <string name="service_channel">Background service</string>
     <string name="service_text">Listening for Home Assistant</string>
+    <!-- Full-screen panels on the dashboard -->
+    <string name="panel_setup_title">Set up this TV</string>
+    <string name="panel_setup_message">Choose which Home Assistant page this TV shows.</string>
+    <string name="panel_open_settings">Open settings</string>
+    <string name="panel_unreachable_title">Can\'t reach Home Assistant</string>
+    <string name="panel_unreachable_message">%1$s\n\nTrying again by itself in %2$d seconds.</string>
+    <string name="panel_try_now">Try now</string>
+    <string name="panel_sign_in_title">Sign in to Home Assistant</string>
+    <string name="panel_sign_in_message">This TV needs to sign in to Home Assistant once. If Home Assistant trusts this TV it takes one click; otherwise use the TV user\'s username and password.</string>
+    <string name="panel_sign_in_rejected">Home Assistant no longer accepts this TV\'s sign-in. Sign in again.</string>
+    <string name="panel_sign_in">Sign in</string>
+
+    <!-- Sign-in screen -->
+    <string name="login_title">Sign in to Home Assistant</string>
+    <string name="login_where">Home Assistant at %1$s</string>
+    <string name="login_tip">Tip: typing is easier with the Google TV app on your phone, or a USB keyboard.</string>
+    <string name="login_timeout">The login page took too long to load. Check that Home Assistant is running and the address in settings is right.</string>
+    <string name="login_unreachable">Can\'t open %1$s: %2$s</string>
+    <string name="login_finishing">Finishing sign-in…</string>
+    <string name="login_failed">Sign-in didn\'t finish</string>
+    <string name="login_bad_redirect">Home Assistant sent back an unexpected answer. Try again.</string>
+    <string name="login_done">Signed in</string>
+    <string name="login_done_message">Opening your dashboard…</string>
+    <string name="login_popup_message">This TV is signed in to Home Assistant at %1$s.</string>
+    <string name="login_try_again">Try again</string>
+    <string name="login_cancel">Cancel</string>
+    <string name="login_no_url_title">No Home Assistant address yet</string>
+    <string name="login_no_url">Enter the dashboard\'s start URL in settings first, then sign in.</string>
+
+    <!-- Settings: sign-in -->
+    <string name="section_sign_in">Home Assistant sign-in</string>
+    <string name="section_display">Display and behaviour</string>
+    <string name="settings_sign_in_again">Sign in again</string>
+    <string name="settings_sign_in_instead">Sign in once on this TV instead</string>
+    <string name="settings_sign_in_options">Other sign-in options…</string>
+    <string name="sign_out_confirm">This TV forgets its sign-in and shows the sign-in screen until you sign in again.</string>
+    <string name="auth_status_signed_in">✓ Signed in on this TV</string>
+    <string name="auth_status_not_signed_in">Not signed in yet</string>
+    <string name="auth_status_token">✓ Using a long-lived access token</string>
+    <string name="auth_status_token_missing">Set to use a long-lived access token, but none is saved</string>
+    <string name="auth_status_page">The Home Assistant page handles sign-in (its own login page or trusted_networks)</string>
+    <string name="auth_login">Sign in once on this TV (recommended)</string>
+    <string name="auth_token">Use a long-lived access token…</string>
+    <string name="auth_none">Let the Home Assistant page handle sign-in</string>
+    <string name="token_dialog_message">Paste a long-lived access token from the TV user\'s Home Assistant profile (Security tab). Typing is easier from the Google TV app on your phone.</string>
+    <string name="token_saved">Saved. The dashboard reloads with this token.</string>
 </resources>

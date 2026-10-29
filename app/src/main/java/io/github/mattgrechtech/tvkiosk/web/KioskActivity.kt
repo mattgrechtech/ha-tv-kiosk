@@ -38,6 +38,7 @@ import io.github.mattgrechtech.tvkiosk.control.KioskState
 import io.github.mattgrechtech.tvkiosk.service.KioskService
 import io.github.mattgrechtech.tvkiosk.settings.Keys
 import io.github.mattgrechtech.tvkiosk.ui.Dialogs
+import io.github.mattgrechtech.tvkiosk.ui.MessagePanel
 import io.github.mattgrechtech.tvkiosk.ui.SettingsActivity
 import java.util.Calendar
 
@@ -58,7 +59,8 @@ class KioskActivity : Activity(), DashboardSurface {
     private lateinit var root: FrameLayout
     private lateinit var webFrame: FrameLayout
     private lateinit var dim: View
-    private lateinit var status: TextView
+    private lateinit var panel: MessagePanel
+    private var panelKind = Panel.NONE
     private lateinit var pointer: PointerController
 
     private var webView: WebView? = null
@@ -96,19 +98,12 @@ class KioskActivity : Activity(), DashboardSurface {
             visibility = View.GONE
             isFocusable = false
         }
-        status = TextView(this).apply {
-            setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
-            gravity = Gravity.CENTER
-            setBackgroundColor(0xE0101114.toInt())
-            setPadding(dp(48), dp(48), dp(48), dp(48))
-            visibility = View.GONE
-        }
+        panel = MessagePanel(this)
         pointer = PointerController(this) { webView }
 
         val match = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         root.addView(webFrame, match)
-        root.addView(status, FrameLayout.LayoutParams(match))
+        root.addView(panel, FrameLayout.LayoutParams(match))
         root.addView(pointer.view, FrameLayout.LayoutParams(match))
         root.addView(dim, FrameLayout.LayoutParams(match))
         setContentView(root)
@@ -171,7 +166,8 @@ class KioskActivity : Activity(), DashboardSurface {
     private fun startDashboard() {
         val start = app.controller.takePendingUrl() ?: app.settings[Keys.START_URL]
         if (start.isEmpty()) {
-            showStatus(getString(R.string.status_no_url))
+            showPanel(Panel.NO_URL, getString(R.string.panel_setup_title), getString(R.string.panel_setup_message), MessagePanel.ICON_TV,
+                MessagePanel.Action(getString(R.string.panel_open_settings), primary = true) { openSettings() })
             startActivity(Intent(this, SettingsActivity::class.java))
             return
         }
@@ -265,7 +261,7 @@ class KioskActivity : Activity(), DashboardSurface {
         override fun onPageFinished(view: WebView, url: String) {
             if (!mainFrameFailed) {
                 retryDelayIndex = 0
-                hideStatus()
+                hidePanel(unless = Panel.SIGN_IN)
                 app.state.update { page(url, view.title ?: "") }
             }
         }
@@ -297,7 +293,9 @@ class KioskActivity : Activity(), DashboardSurface {
         app.state.update { error(message) }
         val delay = RETRY_DELAYS_SECONDS[retryDelayIndex.coerceAtMost(RETRY_DELAYS_SECONDS.lastIndex)]
         retryDelayIndex++
-        showStatus(getString(R.string.status_retrying, message, delay))
+        showPanel(Panel.ERROR, getString(R.string.panel_unreachable_title), getString(R.string.panel_unreachable_message, message, delay), MessagePanel.ICON_WARNING,
+            MessagePanel.Action(getString(R.string.panel_try_now), primary = true) { retryNow() },
+            MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() })
         main.removeCallbacks(retry)
         main.postDelayed(retry, delay * 1000L)
     }
@@ -308,6 +306,12 @@ class KioskActivity : Activity(), DashboardSurface {
         requestedUrl?.let { open(it) }
     }
 
+    private fun retryNow() {
+        main.removeCallbacks(retry)
+        hidePanel()
+        retry.run()
+    }
+
     // ---- HA bridge events --------------------------------------------------------------------
 
     private inner class BridgeEvents : HaBridge.Events {
@@ -316,7 +320,7 @@ class KioskActivity : Activity(), DashboardSurface {
             main.removeCallbacks(disconnectedTooLong)
             when (status) {
                 "connected" -> {
-                    hideStatus()
+                    hidePanel()
                     if (app.settings[Keys.HA_KIOSK_MODE]) bridge?.setKioskMode(true)
                 }
                 "disconnected" -> {
@@ -325,21 +329,31 @@ class KioskActivity : Activity(), DashboardSurface {
                 }
                 "auth-invalid" -> {
                     app.auth.forgetCachedToken()
-                    showStatus(getString(R.string.status_auth_invalid))
+                    showSignIn(getString(R.string.panel_sign_in_rejected))
                 }
             }
         }
 
         override fun onFrontendLoaded() {
-            hideStatus()
+            hidePanel(unless = Panel.SIGN_IN)
             if (app.settings[Keys.HA_KIOSK_MODE]) bridge?.setKioskMode(true)
         }
 
         override fun onShowSettings() = openSettings()
 
-        override fun onAuthFailed(message: String) {
-            app.state.update { error(message) }
-            showStatus(message)
+        override fun onAuthFailed(failure: HaAuth.Failure) {
+            app.state.update { error(failure.message ?: "Sign-in failed") }
+            when (failure) {
+                is HaAuth.Failure.Invalid -> showSignIn(
+                    if (app.settings[Keys.HA_REFRESH_TOKEN].isEmpty() && app.settings[Keys.AUTH_MODE] == "login")
+                        getString(R.string.panel_sign_in_message) else failure.message ?: ""
+                )
+                is HaAuth.Failure.Unavailable -> showPanel(
+                    Panel.ERROR, getString(R.string.panel_unreachable_title), failure.message ?: "", MessagePanel.ICON_WARNING,
+                    MessagePanel.Action(getString(R.string.panel_try_now), primary = true) { hidePanel(); reload(false, "sign-in retry") },
+                    MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() },
+                )
+            }
         }
     }
 
@@ -424,7 +438,7 @@ class KioskActivity : Activity(), DashboardSurface {
 
     override fun loadUrl(url: String) {
         if (webView == null) createWebView()
-        hideStatus()
+        hidePanel()
         main.removeCallbacks(retry)
         retryDelayIndex = 0
         open(url)
@@ -489,7 +503,7 @@ class KioskActivity : Activity(), DashboardSurface {
                 KeyEvent.ACTION_UP -> {
                     main.removeCallbacks(longPress)
                     if (!centreLongPressed) {
-                        if (pointer.enabled) pointer.click() else {
+                        if (pointer.enabled && !panel.isShowing) pointer.click() else {
                             super.dispatchKeyEvent(KeyEvent(event.downTime, event.downTime, KeyEvent.ACTION_DOWN, code, 0))
                             super.dispatchKeyEvent(KeyEvent(event.downTime, event.eventTime, KeyEvent.ACTION_UP, code, 0))
                         }
@@ -499,7 +513,7 @@ class KioskActivity : Activity(), DashboardSurface {
             return true
         }
 
-        if (pointer.onKey(event)) return true
+        if (!panel.isShowing && pointer.onKey(event)) return true
         return super.dispatchKeyEvent(event)
     }
 
@@ -546,7 +560,7 @@ class KioskActivity : Activity(), DashboardSurface {
         )
         if (changed.any { it in reloadKeys }) {
             app.auth.forgetCachedToken()
-            hideStatus()
+            hidePanel()
             startDashboard()
         } else if (changed.contains(Keys.HA_KIOSK_MODE.name)) {
             bridge?.setKioskMode(app.settings[Keys.HA_KIOSK_MODE])
@@ -574,13 +588,29 @@ class KioskActivity : Activity(), DashboardSurface {
         }
     }
 
-    private fun showStatus(text: String) {
-        status.text = text
-        status.visibility = View.VISIBLE
+    /** What the full-screen panel is showing, so routine events don't hide a sign-in prompt. */
+    private enum class Panel { NONE, NO_URL, ERROR, SIGN_IN }
+
+    private fun showPanel(kind: Panel, title: String, message: String, icon: String?, vararg actions: MessagePanel.Action) {
+        panelKind = kind
+        panel.show(title, message, actions.toList(), iconText = icon)
     }
 
-    private fun hideStatus() {
-        status.visibility = View.GONE
+    private fun showSignIn(message: String) {
+        showPanel(Panel.SIGN_IN, getString(R.string.panel_sign_in_title), message, MessagePanel.ICON_KEY,
+            MessagePanel.Action(getString(R.string.panel_sign_in), primary = true) { openSignIn() },
+            MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() })
+    }
+
+    private fun hidePanel(unless: Panel? = null) {
+        if (panelKind == Panel.NONE || panelKind == unless) return
+        panelKind = Panel.NONE
+        panel.hide()
+        webView?.requestFocus()
+    }
+
+    private fun openSignIn() {
+        startActivity(Intent(this, LoginActivity::class.java))
     }
 
     private fun dp(value: Int) = Math.round(value * resources.displayMetrics.density)

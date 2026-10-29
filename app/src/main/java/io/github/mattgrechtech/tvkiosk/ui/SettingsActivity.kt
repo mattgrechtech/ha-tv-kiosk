@@ -38,20 +38,22 @@ class SettingsActivity : Activity() {
     private lateinit var list: LinearLayout
     private val readers = mutableListOf<(JSONObject) -> Unit>()
     private var dirty = false
-    private var authMode = "none"
-    private var authModeButton: Button? = null
+    private lateinit var startUrlField: EditText
+    private lateinit var haUrlField: EditText
+    private lateinit var authStatus: TextView
+    private lateinit var signInButton: Button
+    private lateinit var signOutButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = application as KioskApp
-        authMode = app.settings[Keys.AUTH_MODE]
 
         list = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(64), dp(32), dp(64), dp(48))
         }
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(0xFF121316.toInt())
+            setBackgroundColor(TvUi.BACKGROUND)
             addView(list)
         }
         setContentView(scroll)
@@ -66,14 +68,21 @@ class SettingsActivity : Activity() {
         )
 
         section(R.string.section_dashboard)
-        text(Keys.START_URL, R.string.label_start_url, hint = "http://homeassistant.local:8123/lovelace/0", uri = true)
-        text(Keys.HA_URL, R.string.label_ha_url, hint = getString(R.string.hint_ha_url), uri = true)
-        authModeButton = button(authModeLabel()) { pickAuthMode() }
-        buttonRow(
-            getString(R.string.settings_sign_in) to { saveThen { startActivity(Intent(this, LoginActivity::class.java)) } },
-            getString(R.string.settings_sign_out) to { signOut() },
-        )
-        secret(Keys.HA_LONG_LIVED_TOKEN, R.string.label_ha_token)
+        startUrlField = text(Keys.START_URL, R.string.label_start_url, hint = "http://homeassistant.local:8123/lovelace/0", uri = true)
+        haUrlField = text(Keys.HA_URL, R.string.label_ha_url, hint = getString(R.string.hint_ha_url), uri = true)
+
+        section(R.string.section_sign_in)
+        authStatus = TextView(this).apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 20f)
+            setPadding(0, dp(4), 0, dp(4))
+        }
+        list.addView(authStatus, fullWidth())
+        signInButton = button(getString(R.string.settings_sign_in), primary = true) { signIn() }
+        signOutButton = button(getString(R.string.settings_sign_out)) { signOut() }
+        button(getString(R.string.settings_sign_in_options)) { signInOptions() }
+        updateAuthStatus()
+
+        section(R.string.section_display)
         switch(Keys.HA_KIOSK_MODE, R.string.label_ha_kiosk_mode)
         switch(Keys.KEEP_SCREEN_ON, R.string.label_keep_screen_on)
         switch(Keys.BOOT_START, R.string.label_boot_start)
@@ -165,12 +174,13 @@ class SettingsActivity : Activity() {
         })
     }
 
-    private fun text(key: Key<String>, label: Int, hint: String? = null, uri: Boolean = false) {
+    private fun text(key: Key<String>, label: Int, hint: String? = null, uri: Boolean = false): EditText {
         list.addView(labelView(label))
         val type = InputType.TYPE_CLASS_TEXT or (if (uri) InputType.TYPE_TEXT_VARIATION_URI else 0)
         val field = edit(app.settings[key], hint, type)
         list.addView(field, fullWidth())
         readers += { it.put(key.name, field.text.toString().trim()) }
+        return field
     }
 
     private fun number(key: Key<Int>, label: Int) {
@@ -207,12 +217,8 @@ class SettingsActivity : Activity() {
         readers += { it.put(key.name, view.isChecked) }
     }
 
-    private fun button(text: String, onClick: () -> Unit): Button {
-        val view = Button(this).apply {
-            this.text = text
-            isAllCaps = false
-            setOnClickListener { onClick() }
-        }
+    private fun button(text: String, primary: Boolean = false, onClick: () -> Unit): Button {
+        val view = TvUi.button(this, text, primary, onClick)
         list.addView(view, fullWidth().apply { topMargin = dp(8) })
         return view
     }
@@ -223,11 +229,8 @@ class SettingsActivity : Activity() {
             gravity = Gravity.START
         }
         for ((text, onClick) in buttons) {
-            row.addView(Button(this).apply {
-                this.text = text
-                isAllCaps = false
-                setOnClickListener { onClick() }
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(12) })
+            row.addView(TvUi.button(this, text, onClick = onClick),
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = dp(12) })
         }
         list.addView(row, fullWidth().apply { topMargin = dp(8) })
     }
@@ -237,7 +240,7 @@ class SettingsActivity : Activity() {
     // ---- actions ---------------------------------------------------------------------------
 
     private fun collect(): JSONObject {
-        val json = JSONObject().put(Keys.AUTH_MODE.name, authMode)
+        val json = JSONObject()
         readers.forEach { it(json) }
         return json
     }
@@ -256,10 +259,6 @@ class SettingsActivity : Activity() {
         return true
     }
 
-    private fun saveThen(action: () -> Unit) {
-        if (save(closeAfter = false)) action()
-    }
-
     private fun closeAsking() {
         if (!dirty) {
             finish()
@@ -276,29 +275,86 @@ class SettingsActivity : Activity() {
         closeAsking()
     }
 
-    private fun authModeLabel() = getString(R.string.label_auth_mode) + ": " + when (authMode) {
-        "login" -> getString(R.string.auth_login)
-        "token" -> getString(R.string.auth_token)
-        else -> getString(R.string.auth_none)
+    override fun onResume() {
+        super.onResume()
+        // Coming back from the sign-in screen: show the result straight away.
+        if (::authStatus.isInitialized) updateAuthStatus()
     }
 
-    private fun pickAuthMode() {
-        fun choose(mode: String) {
-            authMode = mode
-            dirty = true
-            authModeButton?.text = authModeLabel()
+    // ---- sign-in -------------------------------------------------------------------------------
+
+    /** The sign-in status in plain words, and only the buttons that make sense right now. */
+    private fun updateAuthStatus() {
+        val mode = app.settings[Keys.AUTH_MODE]
+        val signedIn = mode == "login" && app.settings[Keys.HA_REFRESH_TOKEN].isNotEmpty()
+        val hasToken = app.settings[Keys.HA_LONG_LIVED_TOKEN].isNotEmpty()
+        val (text, colour) = when {
+            signedIn -> getString(R.string.auth_status_signed_in) to TvUi.SUCCESS
+            mode == "login" -> getString(R.string.auth_status_not_signed_in) to TvUi.WARNING
+            mode == "token" && hasToken -> getString(R.string.auth_status_token) to TvUi.SUCCESS
+            mode == "token" -> getString(R.string.auth_status_token_missing) to TvUi.WARNING
+            else -> getString(R.string.auth_status_page) to TvUi.TEXT_SECONDARY
         }
-        Dialogs.list(this, getString(R.string.label_auth_mode), listOf(
-            getString(R.string.auth_none) to { choose("none") },
-            getString(R.string.auth_login) to { choose("login") },
-            getString(R.string.auth_token) to { choose("token") },
-        ))
+        authStatus.text = text
+        authStatus.setTextColor(colour)
+        signInButton.text = getString(
+            when {
+                signedIn -> R.string.settings_sign_in_again
+                mode == "login" -> R.string.settings_sign_in
+                else -> R.string.settings_sign_in_instead
+            }
+        )
+        signOutButton.visibility = if (signedIn) android.view.View.VISIBLE else android.view.View.GONE
+    }
+
+    /** Saves just the address fields (sign-in needs them), then opens HA's login page. */
+    private fun signIn() {
+        val urls = JSONObject()
+            .put(Keys.START_URL.name, startUrlField.text.toString().trim())
+            .put(Keys.HA_URL.name, haUrlField.text.toString().trim())
+        val result = SettingsJson.import(app.settings, urls)
+        if (result.rejected.isNotEmpty()) {
+            Dialogs.message(this, getString(R.string.settings_not_saved),
+                result.rejected.entries.joinToString("\n") { (k, v) -> "$k: $v" })
+            return
+        }
+        if (app.settings.haBaseUrl() == null) {
+            Dialogs.message(this, getString(R.string.settings_sign_in), getString(R.string.login_no_url))
+            startUrlField.requestFocus()
+            return
+        }
+        startActivity(Intent(this, LoginActivity::class.java))
     }
 
     private fun signOut() {
-        thread(name = "ha-sign-out") {
-            app.auth.signOut()
-            runOnUiThread { Toast.makeText(this, R.string.settings_signed_out, Toast.LENGTH_SHORT).show() }
+        Dialogs.confirm(this, getString(R.string.settings_sign_out), getString(R.string.sign_out_confirm)) {
+            thread(name = "ha-sign-out") {
+                app.auth.signOut()
+                runOnUiThread { updateAuthStatus() }
+            }
+        }
+    }
+
+    private fun signInOptions() {
+        Dialogs.list(this, getString(R.string.settings_sign_in_options), listOf(
+            getString(R.string.auth_login) to { signIn() },
+            getString(R.string.auth_token) to { askForToken() },
+            getString(R.string.auth_none) to {
+                app.settings[Keys.AUTH_MODE] = "none"
+                updateAuthStatus()
+            },
+        ))
+    }
+
+    private fun askForToken() {
+        Dialogs.input(this, getString(R.string.auth_token), getString(R.string.token_dialog_message), password = true) { value ->
+            if (value.isEmpty()) return@input
+            app.settings.edit {
+                put(Keys.HA_LONG_LIVED_TOKEN, value)
+                put(Keys.AUTH_MODE, "token")
+            }
+            updateAuthStatus()
+            Dialogs.message(this, getString(R.string.auth_token), getString(R.string.token_saved))
         }
     }
 
