@@ -1,0 +1,40 @@
+# Security
+
+This app trusts your **local network**, like the rest of ha-tv-kit. Read this before installing.
+
+## What listens on the network
+
+| Port | What | Protection |
+|---|---|---|
+| 2424 (configurable) | REST API | Bearer token (random, 256-bit, rotatable); `Host` header must be the TV's address; 10 bad tokens per minute blocks the sender for a minute |
+| 5001 (off by default) | TvOverlay-compatible `/notify` | **None**, like TvOverlay itself. It can only show pop-ups |
+| none | MQTT | Outgoing connection to your broker with its own user; TLS optional |
+
+Never forward these ports from the internet. Put visitors and untrusted gadgets on a guest Wi-Fi that can't reach your TVs.
+
+## What it can't do, by design
+
+- No remote shell, no running scripts in the page, no installing or removing apps, no file access.
+- The adb set-up receiver requires a permission only adb and the system hold.
+- The bridge that gives Home Assistant's frontend its sign-in token only answers pages on your HA address. With current WebViews the WebView enforces this; on old ones every call checks the page's origin.
+- Web pages can't open other apps (`intent:` links are blocked) and can't read files on the TV.
+- No cloud, no analytics, no crash reporting to anyone.
+
+## Secrets
+
+- The API token, MQTT password, HA long-lived token, HA refresh token and settings PIN are stored encrypted with a key held in the Android Keystore.
+- Exports leave secrets out unless you ask for them over adb; the HA refresh token is never exported.
+- The API token is shown on the TV's settings screen. Anyone who can open settings on the TV can read it: set a settings PIN if that matters in your home.
+- If the token leaks: Settings → *New API token*, then update Home Assistant.
+
+## Sign-in trade-offs
+
+- **Sign in once on this TV** (recommended): the TV keeps a refresh token for the HA user you signed in as. Revoke it in that user's HA profile (Security → Refresh tokens) if the TV is lost or replaced.
+- **Long-lived token:** simple, but it never expires on its own. Delete it in HA when you stop using it.
+- **trusted_networks:** see the kit's notes: anyone who takes over the TV's IP gets that HA user's session.
+
+In every case use a **non-admin HA user** for the TV. Non-admin isn't read-only: the TV user can still control devices.
+
+## Reporting a problem
+
+Open a GitHub issue without exploit details and ask for a private contact, or use GitHub's private vulnerability reporting on the repository if it's enabled.

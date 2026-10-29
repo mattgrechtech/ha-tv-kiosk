@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Working name: change it here, in tools/make_assets.py (banner text) and in the README. -->
+    <string name="app_name">TV Kiosk</string>
+
+    <string name="status_no_url">No dashboard set yet.\nHold OK (or press Menu) to open settings.</string>
+    <string name="status_retrying">Can\'t load the dashboard: %1$s\n\nTrying again in %2$d s…</string>
+    <string name="status_auth_invalid">Home Assistant rejected this TV\'s sign-in.\nHold OK → Settings to sign in again.</string>
+
+    <string name="menu_reload">Reload</string>
+    <string name="menu_pointer_on">Pointer on</string>
+    <string name="menu_pointer_off">Pointer off</string>
+    <string name="menu_start_page">Start page</string>
+    <string name="menu_settings">Settings</string>
+
+    <string name="pin_title">Settings PIN</string>
+    <string name="pin_hint">PIN</string>
+    <string name="pin_wrong">Wrong PIN</string>
+
+    <string name="settings_title">settings</string>
+    <string name="settings_save">Save</string>
+    <string name="settings_close">Close</string>
+    <string name="settings_discard">Discard changes</string>
+    <string name="settings_unsaved">Unsaved changes</string>
+    <string name="settings_saved">Saved</string>
+    <string name="settings_not_saved">Not saved</string>
+    <string name="settings_sign_in">Sign in to Home Assistant</string>
+    <string name="settings_sign_out">Sign out</string>
+    <string name="settings_signed_out">Signed out</string>
+    <string name="settings_show_token">Show API address and token</string>
+    <string name="settings_new_token">New API token</string>
+    <string name="settings_overlay_permission">Allow pop-ups over other apps</string>
+    <string name="settings_test_popup">Test pop-up</string>
+    <string name="settings_export">Export settings</string>
+    <string name="settings_import">Import settings</string>
+    <string name="settings_status">Status</string>
+
+    <string name="section_dashboard">Dashboard</string>
+    <string name="section_recovery">Recovery</string>
+    <string name="section_api">Local API</string>
+    <string name="section_mqtt">MQTT (Home Assistant discovery)</string>
+    <string name="section_device">Device</string>
+
+    <string name="label_start_url">Start URL</string>
+    <string name="label_ha_url">Home Assistant URL (optional)</string>
+    <string name="hint_ha_url">Empty: the start URL\'s address</string>
+    <string name="label_auth_mode">Sign-in</string>
+    <string name="auth_none">The page handles it (login page or trusted_networks)</string>
+    <string name="auth_login">Sign in once on this TV (recommended)</string>
+    <string name="auth_token">Long-lived access token</string>
+    <string name="label_ha_token">Long-lived access token</string>
+    <string name="label_ha_kiosk_mode">Hide Home Assistant\'s header and sidebar</string>
+    <string name="label_keep_screen_on">Keep the screen on while the dashboard shows</string>
+    <string name="label_boot_start">Open the dashboard at boot</string>
+    <string name="label_pointer_default">Start with the pointer on</string>
+    <string name="label_reload_on_network">Reload when the network comes back</string>
+    <string name="label_reload_on_disconnect">Reload after Home Assistant is unreachable for (seconds, 0 = never)</string>
+    <string name="label_nightly_reload">Reload every night at hour (0-23, -1 = never)</string>
+    <string name="label_api_enabled">REST API</string>
+    <string name="label_api_port">API port</string>
+    <string name="label_tvoverlay_compat">TvOverlay-compatible pop-ups (no token: anyone on the network can show pop-ups)</string>
+    <string name="label_tvoverlay_port">TvOverlay-compatible port</string>
+    <string name="label_mqtt_enabled">MQTT</string>
+    <string name="label_mqtt_host">Broker address</string>
+    <string name="label_mqtt_port">Broker port</string>
+    <string name="label_mqtt_tls">TLS</string>
+    <string name="label_mqtt_user">Username</string>
+    <string name="label_mqtt_password">Password</string>
+    <string name="label_mqtt_base_topic">Base topic</string>
+    <string name="label_mqtt_discovery_prefix">Discovery prefix</string>
+    <string name="label_device_name">Device name (shown in Home Assistant)</string>
+    <string name="label_settings_pin">Settings PIN (4-8 digits)</string>
+    <string name="hint_secret_set">Set. Leave empty to keep, type - to clear</string>
+    <string name="hint_secret_unset">Not set</string>
+
+    <string name="token_caption">Address: %1$s\nToken: %2$s\n\nSend it as: Authorization: Bearer &lt;token&gt;</string>
+    <string name="new_token_confirm">Anything using the old token (Home Assistant, scripts) stops working until you update it.</string>
+    <string name="overlay_adb">This TV has no screen for that permission. From a computer, run:\n\nadb shell appops set %1$s SYSTEM_ALERT_WINDOW allow</string>
+    <string name="test_popup_message">Pop-ups work.</string>
+    <string name="export_done">Saved to %1$s (without secrets).\n\nCopy it with: adb pull %1$s</string>
+    <string name="import_missing">No file at %1$s.\n\nCopy one there with: adb push settings.json %1$s</string>
+
+    <string name="login_no_url">Set the start URL or Home Assistant URL first</string>
+    <string name="login_failed">Sign-in failed</string>
+    <string name="login_bad_redirect">Home Assistant sent back an unexpected answer. Try again.</string>
+    <string name="login_done">Signed in to Home Assistant</string>
+
+    <string name="service_channel">Background service</string>
+    <string name="service_text">Listening for Home Assistant</string>
+</resources>

@@ -1,0 +1,594 @@
+package io.github.mattgrechtech.tvkiosk.web
+
+import android.annotation.SuppressLint
+import android.app.Activity
+import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.net.ConnectivityManager
+import android.net.Network
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
+import android.util.Log
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.KeyEvent
+import android.view.View
+import android.view.ViewGroup
+import android.view.WindowInsets
+import android.view.WindowInsetsController
+import android.view.WindowManager
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.TextView
+import io.github.mattgrechtech.tvkiosk.BuildConfig
+import io.github.mattgrechtech.tvkiosk.KioskApp
+import io.github.mattgrechtech.tvkiosk.R
+import io.github.mattgrechtech.tvkiosk.control.DashboardSurface
+import io.github.mattgrechtech.tvkiosk.control.KioskState
+import io.github.mattgrechtech.tvkiosk.service.KioskService
+import io.github.mattgrechtech.tvkiosk.settings.Keys
+import io.github.mattgrechtech.tvkiosk.ui.Dialogs
+import io.github.mattgrechtech.tvkiosk.ui.SettingsActivity
+import java.util.Calendar
+
+/**
+ * The dashboard: one full-screen WebView showing Home Assistant, kept alive.
+ *
+ * Recovery: a failed load retries with back-off; a crashed or frozen renderer gets a new WebView;
+ * the page reloads when the network comes back, when HA's connection stays down too long, and
+ * optionally every night.
+ *
+ * Remote: Back goes back in the page, then to the TV home screen (the dashboard keeps running
+ * behind it). Holding OK (or Menu) opens the
+ * quick menu: reload, pointer, start page, settings.
+ */
+class KioskActivity : Activity(), DashboardSurface {
+
+    private lateinit var app: KioskApp
+    private lateinit var root: FrameLayout
+    private lateinit var webFrame: FrameLayout
+    private lateinit var dim: View
+    private lateinit var status: TextView
+    private lateinit var pointer: PointerController
+
+    private var webView: WebView? = null
+    private var bridge: HaBridge? = null
+    /** The URL last asked for, used for retries. */
+    private var requestedUrl: String? = null
+
+    private val main = Handler(Looper.getMainLooper())
+    private var retryDelayIndex = 0
+    private var mainFrameFailed = false
+    private var networkLost = false
+    private var heartbeatPending = 0
+    private var lastNightlyReloadDay = -1
+    private var resumed = false
+
+    private var centreDownAt = 0L
+    private var centreLongPressed = false
+    private val longPress = Runnable {
+        centreLongPressed = true
+        showQuickMenu()
+    }
+
+    private val settingsListener: (Set<String>) -> Unit = { changed -> main.post { onSettingsChanged(changed) } }
+
+    // ---- lifecycle -------------------------------------------------------------------------
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        app = application as KioskApp
+
+        root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        webFrame = FrameLayout(this)
+        dim = View(this).apply {
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+            isFocusable = false
+        }
+        status = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 24f)
+            gravity = Gravity.CENTER
+            setBackgroundColor(0xE0101114.toInt())
+            setPadding(dp(48), dp(48), dp(48), dp(48))
+            visibility = View.GONE
+        }
+        pointer = PointerController(this) { webView }
+
+        val match = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+        root.addView(webFrame, match)
+        root.addView(status, FrameLayout.LayoutParams(match))
+        root.addView(pointer.view, FrameLayout.LayoutParams(match))
+        root.addView(dim, FrameLayout.LayoutParams(match))
+        setContentView(root)
+
+        applyWindowFlags()
+        pointer.enabled = app.settings[Keys.POINTER_DEFAULT]
+        app.state.update { pointer(pointer.enabled) }
+
+        app.settings.addListener(settingsListener)
+        app.controller.attach(this)
+        app.controller.popups.attachDashboard(root)
+        registerNetworkCallback()
+
+        applyScreen(app.state.screen, app.state.dimLevel)
+        startDashboard()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        app.controller.takePendingUrl()?.let { loadUrl(it) }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        resumed = true
+        webView?.onResume()
+        // The service may have been refused while the app was in the background (Android 12+).
+        KioskService.start(this)
+        app.state.update { dashboardVisible(true) }
+        app.controller.takePendingUrl()?.let { loadUrl(it) }
+        scheduleTick()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        resumed = false
+        app.state.update { dashboardVisible(false) }
+        main.removeCallbacks(tick)
+        // Another app is in front: stop spending CPU on a dashboard nobody sees.
+        webView?.onPause()
+    }
+
+    override fun onDestroy() {
+        main.removeCallbacksAndMessages(null)
+        unregisterNetworkCallback()
+        app.settings.removeListener(settingsListener)
+        app.controller.detach(this)
+        app.controller.popups.detachDashboard(root)
+        destroyWebView()
+        super.onDestroy()
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
+    // ---- the WebView -----------------------------------------------------------------------
+
+    private fun startDashboard() {
+        val start = app.controller.takePendingUrl() ?: app.settings[Keys.START_URL]
+        if (start.isEmpty()) {
+            showStatus(getString(R.string.status_no_url))
+            startActivity(Intent(this, SettingsActivity::class.java))
+            return
+        }
+        createWebView()
+        loadUrl(start)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun createWebView() {
+        destroyWebView()
+        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+
+        val view = WebView(this)
+        view.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            mediaPlaybackRequiresUserGesture = false
+            // HA on a LAN is usually plain http; cameras may mix.
+            mixedContentMode = WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
+            allowFileAccess = false
+            allowContentAccess = false
+            setSupportMultipleWindows(false)
+            javaScriptCanOpenWindowsAutomatically = false
+            userAgentString = "$userAgentString TvKiosk/${BuildConfig.VERSION_NAME}"
+        }
+        view.setBackgroundColor(Color.BLACK)
+        view.isFocusable = true
+        view.isFocusableInTouchMode = true
+        view.webViewClient = Client()
+        view.webChromeClient = object : WebChromeClient() {
+            override fun onReceivedTitle(view: WebView, title: String?) {
+                app.state.update { page(view.url ?: "", title ?: "") }
+            }
+        }
+
+        val haOrigin = app.settings.haBaseUrl()
+        if (haOrigin != null) {
+            bridge = HaBridge(view, haOrigin, app.auth, BridgeEvents()).also { it.install() }
+        }
+
+        webView = view
+        webFrame.addView(view, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        view.requestFocus()
+        heartbeatPending = 0
+    }
+
+    private fun destroyWebView() {
+        bridge?.shutdown()
+        bridge = null
+        webView?.let {
+            webFrame.removeView(it)
+            it.stopLoading()
+            it.destroy()
+        }
+        webView = null
+    }
+
+    private fun recreate(reason: String) {
+        Log.w(TAG, "Recreating the WebView: $reason")
+        app.state.update { reloaded(reason) }
+        createWebView()
+        requestedUrl?.let { open(it) }
+    }
+
+    /** Loads [url], adding external auth when the app manages HA sign-in. */
+    private fun open(url: String) {
+        val view = webView ?: return
+        requestedUrl = url
+        val base = app.settings.haBaseUrl()
+        val managed = app.settings[Keys.AUTH_MODE] != "none"
+        view.loadUrl(if (managed && base != null) HaUrls.withExternalAuth(url, base) else url)
+    }
+
+    private inner class Client : WebViewClient() {
+
+        override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+            val scheme = request.url.scheme?.lowercase()
+            // Stay in the WebView for web pages; never hand off to other apps (intent:, market:, ...).
+            return scheme != "http" && scheme != "https"
+        }
+
+        override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
+            mainFrameFailed = false
+            bridge?.onPageStarted(url)
+            app.state.update {
+                page(url, "")
+                haConnection("unknown")
+            }
+        }
+
+        override fun onPageFinished(view: WebView, url: String) {
+            if (!mainFrameFailed) {
+                retryDelayIndex = 0
+                hideStatus()
+                app.state.update { page(url, view.title ?: "") }
+            }
+        }
+
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (request.isForMainFrame) {
+                onMainFrameFailed("${error.description} (${request.url.host})")
+            }
+        }
+
+        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
+            if (request.isForMainFrame && response.statusCode >= 500) {
+                onMainFrameFailed("Home Assistant answered ${response.statusCode}")
+            }
+        }
+
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            Log.e(TAG, "WebView renderer gone (crashed: ${detail.didCrash()})")
+            if (view !== webView) return true
+            app.state.update { error(if (detail.didCrash()) "Renderer crashed" else "Renderer stopped by the system") }
+            // The old WebView is unusable: replace it on the next loop.
+            main.post { recreate("renderer gone") }
+            return true
+        }
+    }
+
+    private fun onMainFrameFailed(message: String) {
+        mainFrameFailed = true
+        app.state.update { error(message) }
+        val delay = RETRY_DELAYS_SECONDS[retryDelayIndex.coerceAtMost(RETRY_DELAYS_SECONDS.lastIndex)]
+        retryDelayIndex++
+        showStatus(getString(R.string.status_retrying, message, delay))
+        main.removeCallbacks(retry)
+        main.postDelayed(retry, delay * 1000L)
+    }
+
+    private val retry = Runnable {
+        Log.i(TAG, "Retrying the dashboard")
+        app.state.update { reloaded("retry after error") }
+        requestedUrl?.let { open(it) }
+    }
+
+    // ---- HA bridge events --------------------------------------------------------------------
+
+    private inner class BridgeEvents : HaBridge.Events {
+        override fun onConnectionStatus(status: String) {
+            app.state.update { haConnection(status) }
+            main.removeCallbacks(disconnectedTooLong)
+            when (status) {
+                "connected" -> {
+                    hideStatus()
+                    if (app.settings[Keys.HA_KIOSK_MODE]) bridge?.setKioskMode(true)
+                }
+                "disconnected" -> {
+                    val seconds = app.settings[Keys.RELOAD_ON_DISCONNECT_SECONDS]
+                    if (seconds > 0) main.postDelayed(disconnectedTooLong, seconds * 1000L)
+                }
+                "auth-invalid" -> {
+                    app.auth.forgetCachedToken()
+                    showStatus(getString(R.string.status_auth_invalid))
+                }
+            }
+        }
+
+        override fun onFrontendLoaded() {
+            hideStatus()
+            if (app.settings[Keys.HA_KIOSK_MODE]) bridge?.setKioskMode(true)
+        }
+
+        override fun onShowSettings() = openSettings()
+
+        override fun onAuthFailed(message: String) {
+            app.state.update { error(message) }
+            showStatus(message)
+        }
+    }
+
+    private val disconnectedTooLong = Runnable {
+        Log.w(TAG, "HA connection down too long; reloading")
+        reload(false, "HA connection lost")
+    }
+
+    // ---- periodic checks ---------------------------------------------------------------------
+
+    private val tick: Runnable = Runnable {
+        heartbeat()
+        nightlyReload()
+        scheduleTick()
+    }
+
+    private fun scheduleTick() {
+        main.removeCallbacks(tick)
+        if (resumed) main.postDelayed(tick, TICK_MILLIS)
+    }
+
+    /** A renderer that stops answering simple scripts is frozen: replace it. */
+    private fun heartbeat() {
+        val view = webView ?: return
+        if (mainFrameFailed) return
+        if (heartbeatPending >= 2) {
+            heartbeatPending = 0
+            recreate("renderer not responding")
+            return
+        }
+        heartbeatPending++
+        view.evaluateJavascript("1") { heartbeatPending = 0 }
+    }
+
+    private fun nightlyReload() {
+        val hour = app.settings[Keys.NIGHTLY_RELOAD_HOUR]
+        if (hour < 0) return
+        val now = Calendar.getInstance()
+        val day = now.get(Calendar.DAY_OF_YEAR)
+        if (now.get(Calendar.HOUR_OF_DAY) == hour && day != lastNightlyReloadDay) {
+            lastNightlyReloadDay = day
+            reload(true, "nightly")
+        }
+    }
+
+    // ---- network -----------------------------------------------------------------------------
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            main.post {
+                val wasDown = networkLost || mainFrameFailed
+                networkLost = false
+                if (wasDown && app.settings[Keys.RELOAD_ON_NETWORK]) {
+                    // Give DHCP/DNS a moment.
+                    main.postDelayed({ reload(false, "network back") }, 3000)
+                }
+            }
+        }
+
+        override fun onLost(network: Network) {
+            main.post { networkLost = true }
+        }
+    }
+
+    private fun registerNetworkCallback() {
+        try {
+            getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "Can't watch the network", e)
+        }
+    }
+
+    private fun unregisterNetworkCallback() {
+        try {
+            getSystemService(ConnectivityManager::class.java).unregisterNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            // Not registered.
+        }
+    }
+
+    // ---- DashboardSurface --------------------------------------------------------------------
+
+    override fun loadUrl(url: String) {
+        if (webView == null) createWebView()
+        hideStatus()
+        main.removeCallbacks(retry)
+        retryDelayIndex = 0
+        open(url)
+    }
+
+    override fun reload(hard: Boolean, reason: String) {
+        app.state.update { reloaded(reason) }
+        main.removeCallbacks(retry)
+        val view = webView
+        if (view == null) {
+            startDashboard()
+            return
+        }
+        if (hard) view.clearCache(true)
+        val url = requestedUrl
+        if (mainFrameFailed && url != null) open(url) else view.reload()
+    }
+
+    override fun applyScreen(mode: KioskState.Screen, level: Int) {
+        when (mode) {
+            KioskState.Screen.ON -> dim.visibility = View.GONE
+            KioskState.Screen.DIM, KioskState.Screen.BLANK -> {
+                dim.alpha = level / 100f
+                dim.visibility = View.VISIBLE
+            }
+        }
+    }
+
+    override fun setPointer(enabled: Boolean) {
+        pointer.enabled = enabled
+        app.state.update { pointer(enabled) }
+    }
+
+    override fun navigateHa(path: String): Boolean = bridge?.navigate(path) ?: false
+
+    // ---- keys --------------------------------------------------------------------------------
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val code = event.keyCode
+        val isCentre = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER ||
+            code == KeyEvent.KEYCODE_NUMPAD_ENTER
+
+        // Any key wakes a dimmed or blank screen.
+        if (event.action == KeyEvent.ACTION_DOWN && app.state.screen != KioskState.Screen.ON) {
+            app.controller.setScreen(KioskState.Screen.ON, 0)
+            return true
+        }
+
+        if (code == KeyEvent.KEYCODE_MENU) {
+            if (event.action == KeyEvent.ACTION_UP) showQuickMenu()
+            return true
+        }
+
+        if (isCentre) {
+            // Hold OK for the quick menu; a short press is replayed as a normal press.
+            when (event.action) {
+                KeyEvent.ACTION_DOWN -> if (event.repeatCount == 0) {
+                    centreDownAt = SystemClock.uptimeMillis()
+                    centreLongPressed = false
+                    main.postDelayed(longPress, LONG_PRESS_MILLIS)
+                }
+                KeyEvent.ACTION_UP -> {
+                    main.removeCallbacks(longPress)
+                    if (!centreLongPressed) {
+                        if (pointer.enabled) pointer.click() else {
+                            super.dispatchKeyEvent(KeyEvent(event.downTime, event.downTime, KeyEvent.ACTION_DOWN, code, 0))
+                            super.dispatchKeyEvent(KeyEvent(event.downTime, event.eventTime, KeyEvent.ACTION_UP, code, 0))
+                        }
+                    }
+                }
+            }
+            return true
+        }
+
+        if (pointer.onKey(event)) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * Back goes back in the page; with nowhere left to go, the TV home screen comes up but the
+     * dashboard keeps running behind it, so coming back is instant and stays signed in.
+     */
+    @Deprecated("Deprecated in Java")
+    override fun onBackPressed() {
+        val view = webView
+        if (view != null && view.canGoBack()) view.goBack() else moveTaskToBack(true)
+    }
+
+    private fun showQuickMenu() {
+        val pointerLabel = getString(if (pointer.enabled) R.string.menu_pointer_off else R.string.menu_pointer_on)
+        Dialogs.list(
+            this,
+            getString(R.string.app_name),
+            listOf(
+                getString(R.string.menu_reload) to { reload(false, "menu") },
+                pointerLabel to { setPointer(!pointer.enabled) },
+                getString(R.string.menu_start_page) to {
+                    val start = app.settings[Keys.START_URL]
+                    if (start.isNotEmpty()) loadUrl(start)
+                },
+                getString(R.string.menu_settings) to { openSettings() },
+            ),
+        )
+    }
+
+    private fun openSettings() {
+        Dialogs.requirePin(this, app.settings[Keys.SETTINGS_PIN]) {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
+    }
+
+    // ---- settings and window -----------------------------------------------------------------
+
+    private fun onSettingsChanged(changed: Set<String>) {
+        if (changed.contains(Keys.KEEP_SCREEN_ON.name)) applyWindowFlags()
+        val reloadKeys = setOf(
+            Keys.START_URL.name, Keys.HA_URL.name, Keys.AUTH_MODE.name,
+            Keys.HA_LONG_LIVED_TOKEN.name, Keys.HA_REFRESH_TOKEN.name,
+        )
+        if (changed.any { it in reloadKeys }) {
+            app.auth.forgetCachedToken()
+            hideStatus()
+            startDashboard()
+        } else if (changed.contains(Keys.HA_KIOSK_MODE.name)) {
+            bridge?.setKioskMode(app.settings[Keys.HA_KIOSK_MODE])
+        }
+    }
+
+    private fun applyWindowFlags() {
+        if (app.settings[Keys.KEEP_SCREEN_ON]) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        else window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        hideSystemBars()
+    }
+
+    private fun hideSystemBars() {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            window.insetsController?.let {
+                it.hide(WindowInsets.Type.systemBars())
+                it.systemBarsBehavior = WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            }
+        } else {
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                or View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                or View.SYSTEM_UI_FLAG_LAYOUT_STABLE or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                or View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION)
+        }
+    }
+
+    private fun showStatus(text: String) {
+        status.text = text
+        status.visibility = View.VISIBLE
+    }
+
+    private fun hideStatus() {
+        status.visibility = View.GONE
+    }
+
+    private fun dp(value: Int) = Math.round(value * resources.displayMetrics.density)
+
+    private companion object {
+        const val TAG = "KioskActivity"
+        val RETRY_DELAYS_SECONDS = intArrayOf(5, 10, 20, 30, 60)
+        const val TICK_MILLIS = 30_000L
+        const val LONG_PRESS_MILLIS = 800L
+    }
+}

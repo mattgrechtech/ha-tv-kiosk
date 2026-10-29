@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A TV screen outline with a house: the status-bar icon. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,4h18a1,1 0 0,1 1,1v11a1,1 0 0,1 -1,1h-7v2h3v1H7v-1h3v-2H3a1,1 0 0,1 -1,-1V5a1,1 0 0,1 1,-1zM4,6v9h16V6H4zM12,7.5l4,3.2V14h-2.5v-2h-3v2H8v-3.3l4,-3.2z" />
+</vector>
