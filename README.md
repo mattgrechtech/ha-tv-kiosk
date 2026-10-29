@@ -2,7 +2,7 @@
 
 **A free, open-source Android TV / Google TV app that shows a Home Assistant dashboard full screen and lets Home Assistant control the TV.** One app instead of a kiosk browser, adb scripts and a separate pop-up app.
 
-> Status: **pre-alpha, not yet built or tested on a TV.** The code is written; the first build and real-TV tests come next ([docs/build-setup.md](docs/build-setup.md)). Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
+> Status: **pre-alpha.** It builds, its unit tests pass and Android Lint is clean; it has not yet run on a real TV. Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
 
 ## What it does
 

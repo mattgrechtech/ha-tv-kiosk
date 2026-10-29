@@ -32,10 +32,9 @@ It should say `17.x`. If `JAVA_HOME` isn't set (Gradle complains), set it to the
 3. Set environment variables (System → Environment variables, user scope):
    - `ANDROID_HOME` = `%LOCALAPPDATA%\Android\Sdk`
    - add `%ANDROID_HOME%\cmdline-tools\latest\bin` and `%ANDROID_HOME%\platform-tools` to `Path`
-4. New terminal:
+4. New terminal. Recent command-line tools replace `sdkmanager` with the `android` CLI; installing a package accepts the Android SDK licence (<https://developer.android.com/studio/terms>):
    ```powershell
-   sdkmanager "platforms;android-35" "build-tools;35.0.0" "platform-tools"
-   sdkmanager --licenses
+   android --sdk=$env:ANDROID_HOME sdk install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
    ```
 
 ## 3. Gradle wrapper
@@ -47,7 +46,8 @@ $v = "8.11.1"
 $tmp = Join-Path $env:TEMP "gradle-$v"
 New-Item -ItemType Directory -Force $tmp | Out-Null
 Invoke-WebRequest "https://services.gradle.org/distributions/gradle-$v-bin.zip" -OutFile "$tmp\gradle.zip"
-$expected = (Invoke-WebRequest "https://services.gradle.org/distributions/gradle-$v-bin.zip.sha256").Content.Trim()
+$raw = (Invoke-WebRequest "https://services.gradle.org/distributions/gradle-$v-bin.zip.sha256" -UseBasicParsing).Content
+$expected = $(if ($raw -is [byte[]]) { [Text.Encoding]::ASCII.GetString($raw) } else { [string]$raw }).Trim()
 $actual = (Get-FileHash "$tmp\gradle.zip" -Algorithm SHA256).Hash.ToLower()
 if ($actual -ne $expected) { throw "Gradle download checksum mismatch" }
 Expand-Archive "$tmp\gradle.zip" -DestinationPath $tmp
@@ -81,6 +81,17 @@ Logs while testing:
 ```powershell
 adb -s 192.168.1.60:5555 logcat -s KioskActivity HaBridge KioskService MqttBridge PopupManager KioskController
 ```
+
+## Troubleshooting
+
+**`java.io.IOException: Unable to establish loopback connection`** (from `android`, Gradle or any Java tool). Java opens an AF_UNIX socket in the temp folder for its internal pipes, and on some Windows set-ups that fails for folders under `AppData\Local` ("Invalid argument: connect"). Point Java at a folder where it works, for the current terminal:
+
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.jdk-sockets" | Out-Null
+$env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$env:USERPROFILE\.jdk-sockets"
+```
+
+To make it permanent, set the same `JAVA_TOOL_OPTIONS` as a user environment variable. Java then prints "Picked up JAVA_TOOL_OPTIONS" once per run, which is harmless.
 
 ## Release builds (later)
 

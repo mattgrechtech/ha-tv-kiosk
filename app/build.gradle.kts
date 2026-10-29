@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "io.github.mattgrechtech.tvkiosk"
     compileSdk = 35
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         // Working ID: decide the permanent one before the first public release.
