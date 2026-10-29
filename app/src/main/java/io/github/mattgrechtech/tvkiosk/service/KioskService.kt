@@ -60,7 +60,12 @@ class KioskService : Service() {
         startChannels()
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int = START_STICKY
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Every startForegroundService() must be answered with startForeground(), even when the
+        // service is already running, or Android kills the app a few seconds later.
+        goForeground()
+        return START_STICKY
+    }
 
     override fun onDestroy() {
         app.settings.removeListener(settingsListener)
