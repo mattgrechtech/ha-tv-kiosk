@@ -62,6 +62,9 @@ class KioskActivity : Activity(), DashboardSurface {
     private lateinit var panel: MessagePanel
     private var panelKind = Panel.NONE
     private lateinit var pointer: PointerController
+    private lateinit var navigator: TargetNavigator
+    /** How the arrow keys work right now: "buttons", "pointer" or "page" (see Keys.REMOTE_MODE). */
+    private var remoteMode = "buttons"
 
     private var webView: WebView? = null
     private var bridge: HaBridge? = null
@@ -100,17 +103,18 @@ class KioskActivity : Activity(), DashboardSurface {
         }
         panel = MessagePanel(this)
         pointer = PointerController(this) { webView }
+        navigator = TargetNavigator(this) { webView }
 
         val match = FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
         root.addView(webFrame, match)
         root.addView(panel, FrameLayout.LayoutParams(match))
         root.addView(pointer.view, FrameLayout.LayoutParams(match))
+        root.addView(navigator.view, FrameLayout.LayoutParams(match))
         root.addView(dim, FrameLayout.LayoutParams(match))
         setContentView(root)
 
         applyWindowFlags()
-        pointer.enabled = app.settings[Keys.POINTER_DEFAULT]
-        app.state.update { pointer(pointer.enabled) }
+        applyRemoteMode(app.settings[Keys.REMOTE_MODE])
 
         app.settings.addListener(settingsListener)
         app.controller.attach(this)
@@ -253,6 +257,7 @@ class KioskActivity : Activity(), DashboardSurface {
 
         override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
             mainFrameFailed = false
+            navigator.reset()
             bridge?.onPageStarted(url)
             app.state.update {
                 page(url, "")
@@ -469,9 +474,23 @@ class KioskActivity : Activity(), DashboardSurface {
         }
     }
 
+    /** The pointer command (API, MQTT, quick menu): pointer on, or back to the configured mode. */
     override fun setPointer(enabled: Boolean) {
-        pointer.enabled = enabled
-        app.state.update { pointer(enabled) }
+        val configured = app.settings[Keys.REMOTE_MODE]
+        applyRemoteMode(
+            when {
+                enabled -> "pointer"
+                configured == "pointer" -> "buttons"
+                else -> configured
+            }
+        )
+    }
+
+    private fun applyRemoteMode(mode: String) {
+        remoteMode = mode
+        pointer.enabled = mode == "pointer"
+        if (mode != "buttons") navigator.reset()
+        app.state.update { pointer(mode == "pointer") }
     }
 
     override fun navigateHa(path: String): Boolean = bridge?.navigate(path) ?: false
@@ -505,7 +524,12 @@ class KioskActivity : Activity(), DashboardSurface {
                 KeyEvent.ACTION_UP -> {
                     main.removeCallbacks(longPress)
                     if (!centreLongPressed) {
-                        if (pointer.enabled && !panel.isShowing) pointer.click() else {
+                        val used = !panel.isShowing && when (remoteMode) {
+                            "pointer" -> { pointer.click(); true }
+                            "buttons" -> navigator.click()
+                            else -> false
+                        }
+                        if (!used) {
                             super.dispatchKeyEvent(KeyEvent(event.downTime, event.downTime, KeyEvent.ACTION_DOWN, code, 0))
                             super.dispatchKeyEvent(KeyEvent(event.downTime, event.eventTime, KeyEvent.ACTION_UP, code, 0))
                         }
@@ -515,7 +539,14 @@ class KioskActivity : Activity(), DashboardSurface {
             return true
         }
 
-        if (!panel.isShowing && pointer.onKey(event)) return true
+        if (!panel.isShowing) {
+            val used = when (remoteMode) {
+                "pointer" -> pointer.onKey(event)
+                "buttons" -> navigator.onKey(event)
+                else -> false
+            }
+            if (used) return true
+        }
         return super.dispatchKeyEvent(event)
     }
 
@@ -526,17 +557,25 @@ class KioskActivity : Activity(), DashboardSurface {
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {
         val view = webView
-        if (view != null && view.canGoBack()) view.goBack() else moveTaskToBack(true)
+        if (view == null) {
+            moveTaskToBack(true)
+            return
+        }
+        // An open Home Assistant dialog (more-info, a card's pop-up) closes first.
+        navigator.closeDialog { closed ->
+            if (closed) return@closeDialog
+            if (view.canGoBack()) view.goBack() else moveTaskToBack(true)
+        }
     }
 
     private fun showQuickMenu() {
-        val pointerLabel = getString(if (pointer.enabled) R.string.menu_pointer_off else R.string.menu_pointer_on)
+        val pointerLabel = getString(if (remoteMode == "pointer") R.string.menu_pointer_off else R.string.menu_pointer_on)
         Dialogs.list(
             this,
             getString(R.string.app_name),
             listOf(
                 getString(R.string.menu_reload) to { reload(false, "menu") },
-                pointerLabel to { setPointer(!pointer.enabled) },
+                pointerLabel to { setPointer(remoteMode != "pointer") },
                 getString(R.string.menu_start_page) to {
                     val start = app.settings[Keys.START_URL]
                     if (start.isNotEmpty()) loadUrl(start)
@@ -556,6 +595,7 @@ class KioskActivity : Activity(), DashboardSurface {
 
     private fun onSettingsChanged(changed: Set<String>) {
         if (changed.contains(Keys.KEEP_SCREEN_ON.name)) applyWindowFlags()
+        if (changed.contains(Keys.REMOTE_MODE.name)) applyRemoteMode(app.settings[Keys.REMOTE_MODE])
         val reloadKeys = setOf(
             Keys.START_URL.name, Keys.HA_URL.name, Keys.AUTH_MODE.name,
             Keys.HA_LONG_LIVED_TOKEN.name, Keys.HA_REFRESH_TOKEN.name,

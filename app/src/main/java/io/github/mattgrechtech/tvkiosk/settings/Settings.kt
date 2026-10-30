@@ -36,7 +36,8 @@ object Keys {
     val HA_KIOSK_MODE = Key("ha_kiosk_mode", true)
     val KEEP_SCREEN_ON = Key("keep_screen_on", true)
     val BOOT_START = Key("boot_start", false)
-    val POINTER_DEFAULT = Key("pointer_default", false)
+    /** buttons: arrows jump between clickable items; pointer: an on-screen pointer; page: arrows go to the page. */
+    val REMOTE_MODE = Key("remote_mode", "buttons", check = { if (it in REMOTE_MODES) null else "must be one of $REMOTE_MODES" })
 
     // Recovery
     val RELOAD_ON_NETWORK = Key("reload_on_network", true)
@@ -76,12 +77,13 @@ object Keys {
     })
 
     val AUTH_MODES = listOf("none", "login", "token")
+    val REMOTE_MODES = listOf("buttons", "pointer", "page")
 
     private fun topicSegment(value: String) =
         if (value.isNotEmpty() && value.none { it in "+#/ " }) null else "must be one topic level, no + # / or spaces"
 
     val ALL: List<Key<*>> = listOf(
-        START_URL, HA_URL, AUTH_MODE, HA_KIOSK_MODE, KEEP_SCREEN_ON, BOOT_START, POINTER_DEFAULT,
+        START_URL, HA_URL, AUTH_MODE, HA_KIOSK_MODE, KEEP_SCREEN_ON, BOOT_START, REMOTE_MODE,
         RELOAD_ON_NETWORK, RELOAD_ON_DISCONNECT_SECONDS, NIGHTLY_RELOAD_HOUR,
         API_ENABLED, API_PORT, TVOVERLAY_COMPAT, TVOVERLAY_PORT,
         MQTT_ENABLED, MQTT_HOST, MQTT_PORT, MQTT_TLS, MQTT_USER, MQTT_BASE_TOPIC, MQTT_DISCOVERY_PREFIX,

@@ -4,8 +4,8 @@
     <string name="app_name">TV Kiosk</string>
 
     <string name="menu_reload">Reload</string>
-    <string name="menu_pointer_on">Pointer on</string>
-    <string name="menu_pointer_off">Pointer off</string>
+    <string name="menu_pointer_on">Use the pointer</string>
+    <string name="menu_pointer_off">Jump between buttons</string>
     <string name="menu_start_page">Start page</string>
     <string name="menu_settings">Settings</string>
 
@@ -26,7 +26,6 @@
     <string name="label_ha_kiosk_mode">Hide Home Assistant\'s header and sidebar</string>
     <string name="label_keep_screen_on">Keep the screen on while the dashboard shows</string>
     <string name="label_boot_start">Open the dashboard at boot</string>
-    <string name="label_pointer_default">Start with the pointer on</string>
     <string name="label_reload_on_network">Reload when the network comes back</string>
     <string name="label_api_enabled">REST API</string>
     <string name="label_api_port">API port</string>
@@ -133,7 +132,10 @@
 
     <string name="row_keep_screen_on_sub">Stops the TV\'s screensaver while the dashboard shows</string>
     <string name="row_boot_start_sub">Opens the dashboard when the TV turns on</string>
-    <string name="row_pointer_sub">An on-screen pointer for cards the remote can\'t reach</string>
+    <string name="row_remote_mode">Remote control on the dashboard</string>
+    <string name="remote_mode_buttons">Jump between buttons (recommended): arrows move between clickable items, OK presses</string>
+    <string name="remote_mode_pointer">On-screen pointer: arrows move a pointer, OK taps under it</string>
+    <string name="remote_mode_page">Let the page handle the arrows</string>
     <string name="row_remote_help">On the dashboard</string>
     <string name="row_remote_help_sub">Hold OK or press Menu for the quick menu: reload, pointer, start page, settings. Back goes to the TV home screen.</string>
 

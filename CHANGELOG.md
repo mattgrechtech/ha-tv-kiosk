@@ -4,6 +4,7 @@
 
 Tested on a TCL Google TV (Android 14).
 
+- Remote control: "jump between buttons" is the new default. Arrows move a highlight between the page's clickable items (found automatically, inside Home Assistant's components too), OK presses, Back closes an open Home Assistant pop-up first. The pointer stays available.
 - Settings rebuilt as a left rail of categories with the settings on the right, like the TV's own settings. Every change saves straight away; no Save button.
 - "Choose a dashboard" lists your Home Assistant dashboards and panels (over HA's WebSocket API), so no URL typing.
 - Sign-in reworked: a Sign in button on the dashboard when needed, a sign-in screen with progress, errors and a "Signed in" step, then straight back to the dashboard.

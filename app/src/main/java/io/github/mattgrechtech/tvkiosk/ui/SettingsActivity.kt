@@ -412,7 +412,9 @@ class SettingsActivity : Activity() {
     private fun screenRows() = listOf<Row>(
         Row.Toggle(getString(R.string.label_keep_screen_on), getString(R.string.row_keep_screen_on_sub), Keys.KEEP_SCREEN_ON),
         Row.Toggle(getString(R.string.label_boot_start), getString(R.string.row_boot_start_sub), Keys.BOOT_START),
-        Row.Toggle(getString(R.string.label_pointer_default), getString(R.string.row_pointer_sub), Keys.POINTER_DEFAULT),
+        Row.Value(getString(R.string.row_remote_mode), remoteModeLabel(app.settings[Keys.REMOTE_MODE])) {
+            choose(getString(R.string.row_remote_mode), Keys.REMOTE_MODE, Keys.REMOTE_MODES.map { remoteModeLabel(it) to it })
+        },
         Row.Info(getString(R.string.row_remote_help), getString(R.string.row_remote_help_sub)),
     )
 
@@ -533,6 +535,14 @@ class SettingsActivity : Activity() {
     private fun <T : Any> choose(title: String, key: Key<T>, options: List<Pair<String, T>>) {
         Dialogs.list(this, title, options.map { (label, value) -> label to { save(key.name, value); Unit } })
     }
+
+    private fun remoteModeLabel(mode: String) = getString(
+        when (mode) {
+            "pointer" -> R.string.remote_mode_pointer
+            "page" -> R.string.remote_mode_page
+            else -> R.string.remote_mode_buttons
+        }
+    )
 
     private fun durationLabel(seconds: Int) = when {
         seconds == 0 -> getString(R.string.value_never)
