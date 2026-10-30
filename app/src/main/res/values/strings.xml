@@ -12,43 +12,24 @@
     <string name="pin_title">Settings PIN</string>
     <string name="pin_hint">PIN</string>
     <string name="pin_wrong">Wrong PIN</string>
-
-    <string name="settings_title">settings</string>
-    <string name="settings_save">Save</string>
-    <string name="settings_close">Close</string>
-    <string name="settings_discard">Discard changes</string>
-    <string name="settings_unsaved">Unsaved changes</string>
-    <string name="settings_saved">Saved</string>
     <string name="settings_not_saved">Not saved</string>
     <string name="settings_sign_in">Sign in to Home Assistant</string>
     <string name="settings_sign_out">Sign out</string>
     <string name="settings_show_token">Show API address and token</string>
     <string name="settings_new_token">New API token</string>
-    <string name="settings_overlay_permission">Allow pop-ups over other apps</string>
     <string name="settings_test_popup">Test pop-up</string>
     <string name="settings_export">Export settings</string>
     <string name="settings_import">Import settings</string>
-    <string name="settings_status">Status</string>
-
-    <string name="section_dashboard">Dashboard</string>
-    <string name="section_recovery">Recovery</string>
     <string name="section_api">Local API</string>
-    <string name="section_mqtt">MQTT (Home Assistant discovery)</string>
-    <string name="section_device">Device</string>
 
     <string name="label_start_url">Start URL</string>
-    <string name="label_ha_url">Home Assistant URL (optional)</string>
-    <string name="hint_ha_url">Empty: the start URL\'s address</string>
     <string name="label_ha_kiosk_mode">Hide Home Assistant\'s header and sidebar</string>
     <string name="label_keep_screen_on">Keep the screen on while the dashboard shows</string>
     <string name="label_boot_start">Open the dashboard at boot</string>
     <string name="label_pointer_default">Start with the pointer on</string>
     <string name="label_reload_on_network">Reload when the network comes back</string>
-    <string name="label_reload_on_disconnect">Reload after Home Assistant is unreachable for (seconds, 0 = never)</string>
-    <string name="label_nightly_reload">Reload every night at hour (0-23, -1 = never)</string>
     <string name="label_api_enabled">REST API</string>
     <string name="label_api_port">API port</string>
-    <string name="label_tvoverlay_compat">TvOverlay-compatible pop-ups (no token: anyone on the network can show pop-ups)</string>
     <string name="label_tvoverlay_port">TvOverlay-compatible port</string>
     <string name="label_mqtt_enabled">MQTT</string>
     <string name="label_mqtt_host">Broker address</string>
@@ -60,8 +41,6 @@
     <string name="label_mqtt_discovery_prefix">Discovery prefix</string>
     <string name="label_device_name">Device name (shown in Home Assistant)</string>
     <string name="label_settings_pin">Settings PIN (4-8 digits)</string>
-    <string name="hint_secret_set">Set. Leave empty to keep, type - to clear</string>
-    <string name="hint_secret_unset">Not set</string>
 
     <string name="token_caption">Address: %1$s\nToken: %2$s\n\nSend it as: Authorization: Bearer &lt;token&gt;</string>
     <string name="new_token_confirm">Anything using the old token (Home Assistant, scripts) stops working until you update it.</string>
@@ -102,20 +81,107 @@
     <string name="login_no_url">Enter the dashboard\'s start URL in settings first, then sign in.</string>
 
     <!-- Settings: sign-in -->
-    <string name="section_sign_in">Home Assistant sign-in</string>
-    <string name="section_display">Display and behaviour</string>
     <string name="settings_sign_in_again">Sign in again</string>
     <string name="settings_sign_in_instead">Sign in once on this TV instead</string>
-    <string name="settings_sign_in_options">Other sign-in options…</string>
     <string name="sign_out_confirm">This TV forgets its sign-in and shows the sign-in screen until you sign in again.</string>
     <string name="auth_status_signed_in">✓ Signed in on this TV</string>
     <string name="auth_status_not_signed_in">Not signed in yet</string>
     <string name="auth_status_token">✓ Using a long-lived access token</string>
     <string name="auth_status_token_missing">Set to use a long-lived access token, but none is saved</string>
     <string name="auth_status_page">The Home Assistant page handles sign-in (its own login page or trusted_networks)</string>
-    <string name="auth_login">Sign in once on this TV (recommended)</string>
     <string name="auth_token">Use a long-lived access token…</string>
     <string name="auth_none">Let the Home Assistant page handle sign-in</string>
     <string name="token_dialog_message">Paste a long-lived access token from the TV user\'s Home Assistant profile (Security tab). Typing is easier from the Google TV app on your phone.</string>
-    <string name="token_saved">Saved. The dashboard reloads with this token.</string>
+    <!-- Settings: rail and pages -->
+    <string name="settings_hint">↑ ↓ choose · → open · ← back\nChanges save straight away</string>
+    <string name="settings_on">On</string>
+    <string name="settings_off">Off</string>
+    <string name="rail_not_signed_in">● Not signed in</string>
+    <string name="rail_connected">● Signed in · connected</string>
+    <string name="rail_page_sign_in">● Sign-in handled by the page</string>
+    <string name="rail_not_connected">● Signed in · not connected</string>
+    <string name="page_dashboard">Dashboard</string>
+    <string name="page_sign_in">Sign-in</string>
+    <string name="page_screen">Screen and remote</string>
+    <string name="page_recovery">Recovery</string>
+    <string name="page_popups">Pop-ups and API</string>
+    <string name="page_mqtt">MQTT</string>
+    <string name="page_device">Device and security</string>
+    <string name="page_status">Status and about</string>
+
+    <string name="value_not_set">Not set</string>
+    <string name="value_set">Set</string>
+    <string name="value_same_as_start">Same as the start page</string>
+    <string name="value_never">Never</string>
+    <string name="value_seconds">%1$d seconds</string>
+    <string name="value_minutes">%1$d min</string>
+
+    <string name="row_pick_dashboard">Choose a dashboard</string>
+    <string name="row_pick_dashboard_sub">Pick from your Home Assistant dashboards and panels</string>
+    <string name="edit_start_url_message">The page this TV opens. Easier: use Choose a dashboard.</string>
+    <string name="row_ha_address">Home Assistant address</string>
+    <string name="edit_ha_url_message">Only needed if the start page isn\'t on Home Assistant itself. Leave empty to use the start page\'s address.</string>
+    <string name="edit_ha_url_first">Enter your Home Assistant address, for example http://192.168.1.50:8123</string>
+    <string name="row_kiosk_mode_sub">Shows only the dashboard, without Home Assistant\'s own menus</string>
+
+    <string name="row_status">Status</string>
+    <string name="row_sign_in_sub">Opens Home Assistant\'s login page. If Home Assistant trusts this TV, it\'s one click.</string>
+    <string name="row_sign_out_sub">This TV forgets its sign-in</string>
+    <string name="header_other_options">Other options</string>
+    <string name="row_token_sub">Paste a token from the TV user\'s profile instead of signing in</string>
+    <string name="row_page_sign_in_sub">Show Home Assistant\'s own login page inside the dashboard</string>
+
+    <string name="row_keep_screen_on_sub">Stops the TV\'s screensaver while the dashboard shows</string>
+    <string name="row_boot_start_sub">Opens the dashboard when the TV turns on</string>
+    <string name="row_pointer_sub">An on-screen pointer for cards the remote can\'t reach</string>
+    <string name="row_remote_help">On the dashboard</string>
+    <string name="row_remote_help_sub">Hold OK or press Menu for the quick menu: reload, pointer, start page, settings. Back goes to the TV home screen.</string>
+
+    <string name="row_reload_disconnect">Reload if Home Assistant is unreachable for</string>
+    <string name="row_nightly_reload">Reload every night at</string>
+    <string name="row_recovery_always">Always on</string>
+    <string name="row_recovery_always_sub">Failed loads are retried, and a crashed or frozen page is replaced, automatically.</string>
+
+    <string name="row_overlay">Pop-ups over other apps</string>
+    <string name="row_overlay_allowed">Allowed: pop-ups show over Netflix, YouTube and everything else</string>
+    <string name="row_overlay_missing">Not allowed yet, so pop-ups only show on the dashboard. Press OK to fix.</string>
+    <string name="row_test_popup_sub">Shows a pop-up in the top-right corner</string>
+    <string name="row_api_sub">Lets Home Assistant control this TV over your network, with a token</string>
+    <string name="row_new_token_sub">Anything using the old token stops working</string>
+    <string name="header_tvoverlay">TvOverlay compatibility</string>
+    <string name="row_tvoverlay">TvOverlay-compatible pop-ups</string>
+    <string name="row_tvoverlay_sub">For automations written for TvOverlay. No token: anything on your network can show pop-ups.</string>
+
+    <string name="row_mqtt_sub">Adds this TV to Home Assistant through MQTT discovery</string>
+    <string name="edit_mqtt_host_message">The broker\'s address, usually Home Assistant\'s IP</string>
+    <string name="header_advanced">Advanced</string>
+
+    <string name="edit_device_name_message">The name Home Assistant shows for this TV</string>
+    <string name="edit_secret_message">Leave empty to keep the current value. Type - to clear it.</string>
+    <string name="header_backup">Backup</string>
+    <string name="row_export_sub">Saves settings, without secrets, to a file you can copy with adb</string>
+    <string name="row_import_sub">Reads settings.json back from the same place</string>
+    <string name="import_done">Applied %1$d settings.</string>
+
+    <string name="status_connection">Home Assistant</string>
+    <string name="status_page">Page</string>
+    <string name="status_last_error">Last error</string>
+    <string name="status_none">None</string>
+    <string name="status_reloads">Reloads</string>
+    <string name="status_reloads_value">%1$d (last: %2$s)</string>
+    <string name="status_api">API address</string>
+    <string name="status_memory">Memory</string>
+    <string name="status_memory_value">App %1$d MB · free %2$d of %3$d MB</string>
+    <string name="status_uptime">Running for</string>
+    <string name="status_uptime_value">%1$d h %2$d min</string>
+    <string name="status_versions">Versions</string>
+    <string name="status_versions_value">App %1$s · WebView %2$s · Android %3$s · %4$s</string>
+
+    <string name="pick_needs_sign_in_mode">The dashboard list needs this TV to be signed in to Home Assistant. Open Sign-in and sign in once on this TV, or type the start page\'s address.</string>
+    <string name="pick_loading">Loading your dashboards…</string>
+    <string name="pick_none">Home Assistant didn\'t list any dashboards this TV user can see.</string>
+    <string name="pick_sign_in_title">Sign in first</string>
+    <string name="pick_sign_in_message">This TV needs to be signed in to Home Assistant to list your dashboards.</string>
+    <string name="pick_built_in">Home Assistant page</string>
+    <string name="pick_failed">Couldn\'t load the dashboards</string>
 </resources>

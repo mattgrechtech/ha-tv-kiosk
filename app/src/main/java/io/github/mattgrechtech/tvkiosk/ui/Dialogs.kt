@@ -48,12 +48,26 @@ object Dialogs {
     }
 
     /** Asks for one line of text; [onOk] gets it trimmed. */
-    fun input(activity: Activity, title: String, message: String, password: Boolean = false, onOk: (String) -> Unit) {
+    fun input(
+        activity: Activity,
+        title: String,
+        message: String,
+        initial: String = "",
+        password: Boolean = false,
+        numeric: Boolean = false,
+        onOk: (String) -> Unit,
+    ) {
         if (activity.isFinishing) return
         val field = EditText(activity).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or
-                (if (password) InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_TEXT_VARIATION_NORMAL)
+            inputType = when {
+                numeric && password -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                numeric -> InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_SIGNED
+                password -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                else -> InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            }
             setSingleLine(true)
+            setText(initial)
+            setSelection(initial.length)
         }
         AlertDialog.Builder(activity)
             .setTitle(title)

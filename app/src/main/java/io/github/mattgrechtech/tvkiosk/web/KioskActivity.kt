@@ -164,7 +164,9 @@ class KioskActivity : Activity(), DashboardSurface {
     // ---- the WebView -----------------------------------------------------------------------
 
     private fun startDashboard() {
-        val start = app.controller.takePendingUrl() ?: app.settings[Keys.START_URL]
+        // With only a Home Assistant address set, show HA's home page until a dashboard is chosen.
+        val start = app.controller.takePendingUrl()
+            ?: app.settings[Keys.START_URL].ifEmpty { app.settings.haBaseUrl()?.let { "$it/" } ?: "" }
         if (start.isEmpty()) {
             showPanel(Panel.NO_URL, getString(R.string.panel_setup_title), getString(R.string.panel_setup_message), MessagePanel.ICON_TV,
                 MessagePanel.Action(getString(R.string.panel_open_settings), primary = true) { openSettings() })
