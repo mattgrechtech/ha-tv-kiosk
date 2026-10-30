@@ -76,6 +76,8 @@ The TV needs developer options and network debugging on (the kit's [TV prep guid
 
 It installs the APK, grants "display over other apps", excludes the app from battery optimisation, sets the start URL, opens the dashboard and prints the API token.
 
+**If you used ha-tv-kit's TV scripts:** they're separate and still apply. The kit's `tv/backups/<name>/` folders (from `backup` / `restore`) hold the TV's package list and settings from before debloating; the provisioning script doesn't read or change them, and `restore` doesn't remove this app. The overlay permission is granted the same way the kit grants it to TvOverlay (`appops set <package> SYSTEM_ALERT_WINDOW allow`). If TvOverlay is installed and you turn on this app's TvOverlay-compatible mode, disable TvOverlay on that TV first (both use port 5001); the kit's `restore` script re-enables it.
+
 Logs while testing:
 
 ```powershell
