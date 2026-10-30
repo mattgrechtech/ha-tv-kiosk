@@ -103,6 +103,8 @@ object Keys {
     val MQTT_PASSWORD = Key("mqtt_password", "", secret = true)
     val HA_LONG_LIVED_TOKEN = Key("ha_long_lived_token", "", secret = true)
     val HA_REFRESH_TOKEN = Key("ha_refresh_token", "", secret = true)
+    /** The Home Assistant address the refresh or long-lived token belongs to (internal). */
+    val HA_CREDENTIAL_ORIGIN = Key("ha_credential_origin", "")
     val SETTINGS_PIN = Key("settings_pin", "", secret = true, check = {
         if (it.isEmpty() || (it.length in 4..8 && it.all(Char::isDigit))) null else "must be 4-8 digits"
     })
@@ -128,11 +130,11 @@ object Keys {
         API_ENABLED, API_PORT, TVOVERLAY_COMPAT, TVOVERLAY_PORT,
         MQTT_ENABLED, MQTT_HOST, MQTT_PORT, MQTT_TLS, MQTT_USER, MQTT_BASE_TOPIC, MQTT_DISCOVERY_PREFIX,
         DEVICE_NAME, DEVICE_ID,
-        API_TOKEN, MQTT_PASSWORD, HA_LONG_LIVED_TOKEN, HA_REFRESH_TOKEN, SETTINGS_PIN,
+        API_TOKEN, MQTT_PASSWORD, HA_LONG_LIVED_TOKEN, HA_REFRESH_TOKEN, SETTINGS_PIN, HA_CREDENTIAL_ORIGIN,
     )
 
     /** Keys that are internal state, not user settings: never imported. */
-    val NOT_IMPORTABLE: Set<Key<*>> = setOf(DEVICE_ID, HA_REFRESH_TOKEN)
+    val NOT_IMPORTABLE: Set<Key<*>> = setOf(DEVICE_ID, HA_REFRESH_TOKEN, HA_CREDENTIAL_ORIGIN)
 
     fun byName(name: String): Key<*>? = ALL.firstOrNull { it.name == name }
 }
@@ -155,6 +157,10 @@ class Settings(private val plain: KeyValueStore, private val secrets: KeyValueSt
         editor.block()
         if (editor.plainChanges.isNotEmpty()) plain.putAll(editor.plainChanges)
         if (editor.secretChanges.isNotEmpty()) secrets.putAll(editor.secretChanges)
+        // A new HA token belongs to the HA address it was set for; see [haCredentialsMatch].
+        if (editor.secretChanges.keys.any { it == Keys.HA_REFRESH_TOKEN.name || it == Keys.HA_LONG_LIVED_TOKEN.name }) {
+            plain.putAll(mapOf(Keys.HA_CREDENTIAL_ORIGIN.name to haBaseUrl().orEmpty()))
+        }
         val changed = editor.plainChanges.keys + editor.secretChanges.keys
         if (changed.isNotEmpty()) synchronized(listeners) { listeners.toList() }.forEach { it(changed) }
     }
@@ -175,6 +181,29 @@ class Settings(private val plain: KeyValueStore, private val secrets: KeyValueSt
         val explicit = get(Keys.HA_URL).trimEnd('/')
         if (explicit.isNotEmpty()) return originOf(explicit)
         return originOf(get(Keys.START_URL))
+    }
+
+    /**
+     * True when the stored Home Assistant tokens belong to the current HA address. When the
+     * address has changed (by setup, by hand, or by someone with the API token), the tokens must
+     * not be sent to the new address: that would hand the TV's HA sign-in to whoever runs it.
+     * Tokens saved before this check existed are adopted by the current address.
+     */
+    fun haCredentialsMatch(): Boolean {
+        val base = haBaseUrl() ?: return false
+        val origin = get(Keys.HA_CREDENTIAL_ORIGIN)
+        if (origin.isEmpty()) {
+            plain.putAll(mapOf(Keys.HA_CREDENTIAL_ORIGIN.name to base))
+            return true
+        }
+        return origin == base
+    }
+
+    /** Forgets the HA tokens (after the HA address changed). */
+    fun clearHaCredentials() = edit {
+        clear(Keys.HA_REFRESH_TOKEN)
+        clear(Keys.HA_LONG_LIVED_TOKEN)
+        clear(Keys.HA_CREDENTIAL_ORIGIN)
     }
 
     /** Every page the dashboard shows: the start page (HA's home page if unset), then [Keys.PAGES]. */

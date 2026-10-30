@@ -2,6 +2,7 @@ package io.github.mattgrechtech.tvkiosk.diag
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppLogTest {
@@ -23,6 +24,14 @@ class AppLogTest {
     @Test fun blanksJwts() {
         val jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl"
         assertFalse(AppLog.redact("access $jwt").contains(jwt))
+    }
+
+    @Test fun blanksSecretsInJson() {
+        val line = AppLog.redact("""{"mqtt_password":"hunter2","settings_pin": "1234","api_token":"abc","device_name":"Lounge"}""")
+        assertFalse(line.contains("hunter2"))
+        assertFalse(line.contains("1234"))
+        assertFalse(line.contains("\"abc\""))
+        assertTrue(line.contains("Lounge"))
     }
 
     @Test fun leavesOrdinaryTextAlone() {

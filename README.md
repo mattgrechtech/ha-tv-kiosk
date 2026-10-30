@@ -2,50 +2,56 @@
 
 **A free, open-source Android TV / Google TV app that shows a Home Assistant dashboard (or any web page) full screen and lets Home Assistant control the TV.** One app instead of a kiosk browser, adb scripts and a separate pop-up app.
 
-> Status: **pre-alpha.** Tested on one TCL Google TV (Android 14). Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
+> Status: **pre-alpha.** Tested on one TCL Google TV (Android 14), including a 72-hour run. Reports from other TVs are very welcome: see [Contributing](CONTRIBUTING.md). Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
 
 ## What it does
 
 - **Set up with the remote:** first-run setup finds Home Assistant on the network, signs in and lists your dashboards. Or choose "A web page" for any site: no Home Assistant needed.
+- **Dashboard:** any HA dashboard full screen, signed in without typing a password on the TV, HA's header and sidebar hidden.
 - **Several pages:** rotate through dashboards or web pages; the remote holds the current one. A night schedule blacks the screen for set hours.
-- **Dashboard:** any HA dashboard full screen, signed in without typing a password on the TV, HA's header and sidebar hidden (HA's own kiosk mode, no extra card).
-- **Stays up:** retries failed loads with back-off; replaces a crashed or frozen WebView; reloads when the network comes back, when HA stays unreachable, and optionally every night.
-- **Remote-friendly:** Back goes back, then home. Hold **OK** (or press Menu) for a quick menu: reload, pointer, start page, settings. An optional on-screen **pointer** for cards that the D-pad can't reach.
-- **Pop-ups over any app:** doorbell snapshots, bin night, alerts, in any corner, stacked, replaceable by id, with your choice of size, opacity and text size, and optional buttons ("Open camera", "Close"). Speaks TvOverlay's `/notify` format.
+- **Remote-friendly:** the arrows jump between a page's buttons and OK presses them, so touch dashboards work with a remote. An on-screen pointer for anything else. Back goes back, then home. Hold **OK** (or press Menu) for a quick menu.
+- **Pop-ups over any app:** doorbell snapshots, bin night, alerts, in any corner, stacked, replaceable by id, with your choice of size, opacity and text size, and optional buttons ("Open camera"). Speaks TvOverlay's `/notify` format, so existing automations keep working.
 - **Home Assistant control:** load a page, navigate, reload, dim or blank the screen, wake, pop-ups, volume, speech, sounds, open another TV app, read state (page, connection, memory, uptime, WebView version).
   - **REST API** with a token, LAN only.
   - **MQTT** with HA discovery: the TV shows up as a device with buttons, a screen select, a dim slider and diagnostics.
-- **Set up over adb** in one script: install, permissions, start URL, token.
-- **Small and private:** no cloud, no accounts, no analytics, no Google services. Three small libraries.
+- **Stays up:** retries failed loads; replaces a crashed or frozen WebView; reloads when the network comes back, when HA stays unreachable, and optionally every night; restarts itself after a crash.
+- **Easy to look after:** a log and diagnostics on the TV and over the API (passwords and tokens blanked), a settings PIN, settings export and import, and set-up over adb in one script.
 
-Not included on purpose: remote shell or script injection, camera motion detection, device-owner lockdown, replacing the TV launcher. See the [plan](https://github.com/mattgrechtech/ha-tv-kit/blob/main/docs/plans/tv-kiosk-app.md) for why.
+Not included on purpose: remote shell or script injection, camera motion detection, device-owner lockdown, replacing the TV launcher.
 
-## Quick start
+## Install
 
-1. Build: [docs/build-setup.md](docs/build-setup.md) (JDK 17 + Android command-line tools, no Android Studio needed).
-2. Install and configure on a TV with network debugging on:
-   ```powershell
-   .\tools\provision.ps1 -Tv 192.168.1.60 -StartUrl "http://192.168.1.50:8123/house?tv=1"
-   ```
-   ```bash
-   ./tools/provision.sh 192.168.1.60 "http://192.168.1.50:8123/house?tv=1"
-   ```
-   Or install the APK any other way and open the app: first-run setup does the rest with the remote.
-3. Sign-in: setup signs in for you. Alternatively, HA's `trusted_networks` for the TV (see the kit's [TV dashboard guide](https://github.com/mattgrechtech/ha-tv-kit/blob/main/docs/04-tv-dashboard.md)).
-4. Connect Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
+1. On the TV, allow apps from unknown sources for the app you'll install with (Settings → Apps → Security & restrictions, or Settings → Privacy → Security, depending on the TV).
+2. Get the APK from [Releases](https://github.com/mattgrechtech/ha-tv-kiosk/releases):
+   - with the **Downloader** app on the TV: enter the APK's link, then install;
+   - or from a computer with adb: `adb connect 192.168.1.60:5555`, then `adb install tv-kiosk-v0.1.0.apk`.
+3. Open **TV Kiosk**. Setup asks whether the TV shows Home Assistant or a web page, finds Home Assistant on your network and signs in.
+4. For pop-ups over other apps, grant "display over other apps": the app asks, and many TVs need it done once over adb (see [Troubleshooting](docs/troubleshooting.md#pop-ups)).
+5. Connect Home Assistant to the TV: [docs/home-assistant.md](docs/home-assistant.md).
+
+Developers can build it instead ([docs/build-setup.md](docs/build-setup.md): JDK 17 and the Android command-line tools, no Android Studio) and install and configure it in one step:
+
+```bash
+./tools/provision.sh 192.168.1.60 "http://192.168.1.50:8123/lovelace/0"
+```
 
 The example IPs are placeholders: `192.168.1.50` for Home Assistant, `192.168.1.60` for a TV.
 
+## Privacy
+
+The app talks only to the addresses you give it (Home Assistant, the web pages you choose, your MQTT broker) and to devices on your network that use its API. It has no accounts, no analytics, no crash reporting and no Google services. Sign-in tokens and passwords are stored encrypted on the TV. See [SECURITY.md](SECURITY.md) for what listens on the network and how it's protected.
+
 ## Docs
 
-- [API](docs/api.md): REST, MQTT topics and entities, adb.
-- [Home Assistant set-up](docs/home-assistant.md): REST commands, MQTT, moving the kit's pop-ups over, wake on doorbell.
-- [Build set-up](docs/build-setup.md).
-- [Security](SECURITY.md).
+- [Home Assistant set-up](docs/home-assistant.md): REST commands, MQTT, moving TvOverlay or ha-tv-kit pop-ups over, wake on doorbell.
+- [API](docs/api.md): REST routes, every setting, pop-up fields, MQTT topics and entities, adb, remote keys for your own pages.
+- [Troubleshooting](docs/troubleshooting.md): setup, sign-in, pop-ups, a forgotten PIN, updating and uninstalling.
+- [Build set-up](docs/build-setup.md) and [Contributing](CONTRIBUTING.md).
+- [Security](SECURITY.md) and [Changelog](CHANGELOG.md).
 
 ## Requirements
 
-Android TV / Google TV on **Android 10 or newer**. Also installs on Android tablets.
+Android TV or Google TV on **Android 10 or newer**, with Android System WebView or Chrome kept up to date. Only tested on TVs; it's built for a remote and a landscape screen.
 
 ## Layout
 

@@ -1,6 +1,6 @@
 # API
 
-Three ways to control the app, all LAN-only: a REST API, MQTT, and adb. They run the same commands.
+Three ways to control the app, all LAN-only: a REST API, MQTT, and adb. They run the same commands, and take the same [settings](#settings).
 
 ## REST API
 
@@ -28,19 +28,61 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/jso
 | `POST /pointer` | `{"enabled": true}` | On-screen pointer on/off (omit `enabled` to toggle) |
 | `POST /notify` | see [Pop-ups](#pop-ups) | Show a pop-up |
 | `POST /notify/clear` | `{"id"}` | Remove one pop-up, or all without `id` |
+| `POST /start_page` | | Back to the start page |
 | `POST /launch` | `{"package"}` | Open another TV app, e.g. `com.google.android.youtube.tv` |
 | `POST /volume` | `{"level": 0-100}` | Media volume |
 | `POST /tts` | `{"message", "language": "en-AU"}` | Speak with the TV's text-to-speech engine, if it has one |
 | `POST /sound` | `{"url", "volume"}` | Play a sound or HA TTS audio URL |
 | `POST /sound/stop` | | Stop sound and speech |
 | `GET /settings` | | Settings as JSON (no secrets) |
-| `POST /settings` | partial settings JSON | Change settings; answers which keys were applied and which were rejected |
+| `POST /settings` | partial settings JSON | Change settings (see [Settings](#settings)); answers which keys were applied and which were rejected |
+| `GET /diagnostics` | | State, settings without secrets, the last crash and the recent log, for bug reports |
+| `GET /logs?lines=200` | | The recent log as plain text (tokens and passwords blanked) |
 
-Pop-up settings: `popup_size`, `popup_opacity`, `popup_text_size`, `popup_corner`, `popup_duration`, `popup_max_per_corner` (1-3), `popup_take_remote` (true/false).
+Status codes: `200` done, `202` started (speech, sound), `400` bad input, `401` token, `404` unknown route, `405` wrong method, `409` can't right now (e.g. the dashboard isn't open), `421` wrong Host, `429` blocked for bad tokens, `503` not ready yet (text-to-speech still starting: try again).
 
-Settings for what the TV shows: `mode` (`home_assistant` or `web`), `start_url`, `pages` (more pages to rotate through: one URL per line, or a JSON array), `rotate_seconds` (0 = off, else 10-86400), `screen_off_from` / `screen_off_to` (hours 0-23 when the screen goes black; `screen_off_from` -1 = never). For example `{"pages": ["http://192.168.1.50:8123/cameras"], "rotate_seconds": 60}`.
+### Settings
 
-Status codes: `200` done, `202` started (speech, sound), `400` bad input, `401` token, `404` unknown route, `405` wrong method, `409` can't right now (e.g. the dashboard isn't open), `421` wrong Host, `429` blocked for bad tokens.
+The same names work in `POST /settings`, adb `CONFIGURE` and a settings export. Secrets are never sent back.
+
+| Setting | Default | Values |
+|---|---|---|
+| `mode` | `home_assistant` | `home_assistant` or `web` (any web page, no Home Assistant sign-in) |
+| `start_url` | | The page to show, `http(s)://...`. Empty: Home Assistant's default dashboard |
+| `ha_url` | | Home Assistant's address. Empty: the start URL's address |
+| `auth_mode` | `login` | `login` (sign in once on the TV), `token` (long-lived token), `none` (the page signs in) |
+| `ha_long_lived_token` | | Secret. Used with `auth_mode: token` |
+| `ha_kiosk_mode` | `true` | Hide Home Assistant's header and sidebar |
+| `pages` | | More pages to rotate through: one URL per line, or a JSON array |
+| `rotate_seconds` | `0` | Seconds on each page; `0` is off, else 10–86400 |
+| `screen_off_from` / `screen_off_to` | `-1` / `7` | Hours (0–23) the screen goes black each night; `-1` is never |
+| `remote_mode` | `buttons` | `buttons` (jump between items), `pointer` (on-screen pointer), `page` (arrows go to the page) |
+| `keep_screen_on` | `true` | Stop the TV's screensaver over the dashboard |
+| `boot_start` | `false` | Open the dashboard when the TV starts |
+| `reload_on_network` | `true` | Reload when the network comes back |
+| `reload_on_disconnect_seconds` | `60` | Reload when Home Assistant stays disconnected this long; `0` is off, else 10–3600 |
+| `nightly_reload_hour` | `-1` | Reload every day at this hour; `-1` is off |
+| `popup_size` | `medium` | `small`, `medium`, `large` |
+| `popup_opacity` | `93` | Background opacity, 40–100 % |
+| `popup_text_size` | `normal` | `normal` or `large` |
+| `popup_corner` | `top_end` | `top_start`, `top_end`, `bottom_start`, `bottom_end` |
+| `popup_duration` | `10` | Seconds, 1–600 |
+| `popup_max_per_corner` | `3` | 1–3 |
+| `popup_take_remote` | `false` | Pop-ups with buttons may take the remote over other apps |
+| `api_enabled` | `true` | The REST API |
+| `api_port` | `2424` | |
+| `api_token` | generated | Secret. The REST API token |
+| `tvoverlay_compat` | `false` | The token-less TvOverlay-compatible endpoint |
+| `tvoverlay_port` | `5001` | |
+| `mqtt_enabled` | `false` | |
+| `mqtt_host`, `mqtt_port`, `mqtt_tls`, `mqtt_user` | `""`, `1883`, `false`, `""` | Broker connection |
+| `mqtt_password` | | Secret |
+| `mqtt_base_topic` | `tvkiosk` | |
+| `mqtt_discovery_prefix` | `homeassistant` | |
+| `device_name` | the TV's model | The name in Home Assistant and in diagnostics |
+| `settings_pin` | | Secret. 4–8 digits to protect the TV's settings screen. Send `""` to remove it |
+
+For example `{"pages": ["http://192.168.1.50:8123/cameras"], "rotate_seconds": 60}`.
 
 ### Pop-ups
 
@@ -126,6 +168,7 @@ adb shell am broadcast -n $R -a $A.CONFIGURE --es json '{"start_url":"http://192
 adb shell am broadcast -n $R -a $A.GET_TOKEN
 adb shell am broadcast -n $R -a $A.EXPORT                       # also writes Android/data/$PKG/files/settings.json
 adb shell am broadcast -n $R -a $A.COMMAND --es command reload
+adb shell am broadcast -n $R -a $A.DIAGNOSTICS                  # also writes Android/data/$PKG/files/diagnostics.json
 ```
 
 `--es json_b64 <base64>` works wherever `--es json` does; the provisioning scripts use it because PowerShell 5.1 strips the quotes in JSON.

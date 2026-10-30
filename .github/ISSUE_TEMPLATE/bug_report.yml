@@ -1,0 +1,35 @@
+name: Bug report
+description: Something doesn't work on your TV
+labels: [bug]
+body:
+  - type: input
+    id: tv
+    attributes:
+      label: TV make and model
+      placeholder: e.g. TCL C755, Chromecast with Google TV, NVIDIA Shield
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: App, Android and WebView versions
+      description: Settings → Status and about → Versions
+    validations:
+      required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: What the TV shows
+      options: [A Home Assistant dashboard, A web page]
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics or log
+      description: Settings → Status and about → Show log, or GET /api/v1/logs. Passwords and tokens are blanked, but check for anything you'd rather not share (IP addresses, URLs).
+      render: text

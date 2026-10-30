@@ -56,9 +56,11 @@ class ProvisionReceiver : BroadcastReceiver() {
                 }
                 ACTION_EXPORT -> {
                     val includeSecrets = intent.getBooleanExtra("include_secrets", false)
-                    val json = SettingsJson.export(app.settings, includeSecrets)
-                    File(context.getExternalFilesDir(null), "settings.json").writeText(json.toString(2))
-                    JSONObject().put("ok", true).put("settings", json)
+                    // The file never holds secrets: on Android 10 other apps may be able to read it.
+                    // With include_secrets they come back in the broadcast answer only.
+                    File(context.getExternalFilesDir(null), "settings.json")
+                        .writeText(SettingsJson.export(app.settings, includeSecrets = false).toString(2))
+                    JSONObject().put("ok", true).put("settings", SettingsJson.export(app.settings, includeSecrets))
                 }
                 ACTION_GET_TOKEN -> JSONObject().put("ok", true).put("token", app.settings[Keys.API_TOKEN])
                 ACTION_DIAGNOSTICS -> JSONObject().put("ok", true).put("file", Diagnostics.export(context).absolutePath)
@@ -72,7 +74,12 @@ class ProvisionReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             JSONObject().put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
         }
-        AppLog.i(TAG, "${intent.action}: ${if (intent.action == ACTION_GET_TOKEN) "(token)" else result.toString()}")
+        // Never the answer itself for actions that can carry secrets.
+        val logged = when (intent.action) {
+            ACTION_GET_TOKEN, ACTION_EXPORT -> "ok=${result.optBoolean("ok")}"
+            else -> result.toString()
+        }
+        AppLog.i(TAG, "${intent.action}: $logged")
         if (isOrderedBroadcast) {
             resultCode = if (result.optBoolean("ok")) 0 else 1
             resultData = result.toString()

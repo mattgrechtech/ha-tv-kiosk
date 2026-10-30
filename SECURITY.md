@@ -17,6 +17,9 @@ Never forward these ports from the internet. Put visitors and untrusted gadgets 
 - No remote shell, no running scripts in the page, no installing or removing apps, no file access.
 - The adb set-up receiver requires a permission only adb and the system hold.
 - The bridge that gives Home Assistant's frontend its sign-in token only answers pages on your HA address. With current WebViews the WebView enforces this; on old ones every call checks the page's origin.
+- The TV's Home Assistant sign-in stays with the server that issued it. If the HA address changes (in setup, by hand, or by someone with the API token), the old sign-in is forgotten, never sent to the new address.
+- The token-less TvOverlay-compatible port only accepts `application/json` bodies, so a web page someone opens can't post pop-ups to it.
+- The API answers one request per connection within 10 seconds, at most three connections per address. Pictures in pop-ups are scaled down as they load, so a huge image can't run the TV out of memory.
 - Web pages can't open other apps (`intent:` links are blocked) and can't read files on the TV.
 - No cloud, no analytics, no crash reporting to anyone.
 
@@ -24,7 +27,8 @@ Never forward these ports from the internet. Put visitors and untrusted gadgets 
 
 - The API token, MQTT password, HA long-lived token, HA refresh token and settings PIN are stored encrypted with a key held in the Android Keystore.
 - Exports leave secrets out unless you ask for them over adb; the HA refresh token is never exported.
-- The API token is shown on the TV's settings screen. Anyone who can open settings on the TV can read it: set a settings PIN if that matters in your home.
+- The API token is shown on the TV's settings screen. Anyone who can open settings on the TV can read it: set a settings PIN if that matters in your home. After five wrong PINs it locks for 30 seconds, then longer each time. A forgotten PIN can be removed with the API token or adb: see [Troubleshooting](docs/troubleshooting.md#forgotten-settings-pin).
+- Logs and diagnostics blank tokens, passwords and the PIN. Settings files written for adb never contain secrets.
 - If the token leaks: Settings → *New API token*, then update Home Assistant.
 
 ## Sign-in trade-offs

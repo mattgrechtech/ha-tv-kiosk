@@ -77,6 +77,8 @@ object AppLog {
 
     private val SECRET_PATTERNS = listOf(
         Regex("(?i)(token|access_token|refresh_token|password|code)=([^&\\s\"]+)") to "$1=…",
+        // JSON fields such as "mqtt_password":"…" or "settings_pin":"1234".
+        Regex("(?i)(\"[\\w-]*(token|password|pin|secret)\"\\s*:\\s*)\"[^\"]*\"") to "$1\"…\"",
         Regex("(?i)(Bearer\\s+)\\S+") to "$1…",
         Regex("\\b[0-9a-f]{32,}\\b") to "…",
         Regex("\\beyJ[\\w-]+\\.[\\w-]+\\.[\\w-]+") to "…", // JWTs (HA access tokens)

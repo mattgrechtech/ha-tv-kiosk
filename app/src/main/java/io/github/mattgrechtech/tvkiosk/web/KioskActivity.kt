@@ -214,9 +214,18 @@ class KioskActivity : Activity(), DashboardSurface {
     @SuppressLint("SetJavaScriptEnabled")
     private fun createWebView() {
         destroyWebView()
-        WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
-
-        val view = WebView(this)
+        val view = try {
+            WebView.setWebContentsDebuggingEnabled(BuildConfig.DEBUG)
+            WebView(this)
+        } catch (e: Exception) {
+            // No WebView installed, disabled, or being updated right now. Explain, don't crash-loop.
+            AppLog.e(TAG, "Can't create a WebView", e)
+            app.state.update { error("No working WebView: ${e.javaClass.simpleName}") }
+            showPanel(Panel.ERROR, getString(R.string.panel_no_webview_title), getString(R.string.panel_no_webview_message), MessagePanel.ICON_WARNING,
+                MessagePanel.Action(getString(R.string.panel_try_now), primary = true) { hidePanel(); startDashboard() },
+                MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() })
+            return
+        }
         view.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true

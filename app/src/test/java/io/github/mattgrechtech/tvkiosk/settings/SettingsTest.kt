@@ -152,4 +152,30 @@ class SettingsTest {
         val result = SettingsJson.import(settings, JSONObject("""{"rotate_seconds":5,"mode":"cinema","screen_off_from":24}"""))
         assertEquals(setOf("rotate_seconds", "mode", "screen_off_from"), result.rejected.keys)
     }
+
+    @Test fun haTokensStayWithTheServerTheyCameFrom() {
+        settings[Keys.HA_URL] = "http://ha.test:8123"
+        settings[Keys.HA_REFRESH_TOKEN] = "refresh"
+        assertEquals("http://ha.test:8123", settings[Keys.HA_CREDENTIAL_ORIGIN])
+        assertTrue(settings.haCredentialsMatch())
+
+        // Someone points the TV at another server: the token must not follow.
+        SettingsJson.import(settings, JSONObject("""{"ha_url":"http://other.test:8123"}"""))
+        assertFalse(settings.haCredentialsMatch())
+        settings.clearHaCredentials()
+        assertEquals("", settings[Keys.HA_REFRESH_TOKEN])
+    }
+
+    @Test fun theCredentialOriginCantBeImported() {
+        val result = SettingsJson.import(settings, JSONObject("""{"ha_credential_origin":"http://evil.test"}"""))
+        assertEquals(setOf("ha_credential_origin"), result.rejected.keys)
+        assertFalse(SettingsJson.export(settings, includeSecrets = true).has("ha_credential_origin"))
+    }
+
+    @Test fun tokensFromBeforeTheCheckAreAdopted() {
+        secrets.values["ha_refresh_token"] = "old"
+        settings[Keys.HA_URL] = "http://ha.test:8123"
+        assertTrue(settings.haCredentialsMatch())
+        assertEquals("http://ha.test:8123", settings[Keys.HA_CREDENTIAL_ORIGIN])
+    }
 }

@@ -106,6 +106,7 @@ class ApiHandler(
         val COMMANDS = mapOf(
             "/url" to "url",
             "/navigate" to "navigate",
+            "/start_page" to "start_page",
             "/reload" to "reload",
             "/screen" to "screen",
             "/wake" to "wake",
@@ -155,6 +156,9 @@ class ApiHandler(
  * TvOverlay-compatible pop-ups: `POST /notify` with TvOverlay's fields, on its own port, with no
  * token (TvOverlay has none), so automations written for TvOverlay keep working. It can only show
  * pop-ups. Off by default.
+ *
+ * The body must be sent as `application/json`: a web page can't send that to another address
+ * without the browser asking first (CORS), so a page someone opens can't post pop-ups here.
  */
 class TvOverlayCompatHandler(
     private val allowedHosts: () -> Set<String>,
@@ -166,6 +170,8 @@ class TvOverlayCompatHandler(
         return when (request.path.trimEnd('/')) {
             "/notify" -> {
                 if (request.method != "POST") return ApiHandler.error(405, "use POST")
+                val type = request.header("content-type")?.substringBefore(';')?.trim()?.lowercase()
+                if (type != "application/json") return ApiHandler.error(415, "send the body as application/json")
                 val args = ApiHandler.body(request) ?: return ApiHandler.error(400, "body must be a JSON object")
                 // No token here, so no buttons: a button could open any page on the dashboard.
                 args.remove("actions")

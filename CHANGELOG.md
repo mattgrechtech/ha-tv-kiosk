@@ -1,9 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.1.0 (unreleased)
 
-Tested on a TCL Google TV (Android 14).
+First public version. Pre-alpha: tested on one TCL Google TV (Android 14), including a 72-hour run.
 
+- Security: the Home Assistant sign-in is tied to the server that issued it (changing the HA address, including over the API, forgets it rather than sending it on); the TvOverlay-compatible port only accepts JSON bodies (no pop-ups from web pages); a 10-second limit per API request and three connections per address; pop-up pictures scaled down as they load; secrets blanked from logs and adb exports; a lockout after five wrong PINs; the Gradle download is checked against its published checksum.
+- A clear message, instead of a crash loop, when the TV's WebView is missing or updating.
 - Pages can run their own remote navigation: inside an element marked `data-tvkiosk-keys="page"` the arrows, OK and Back (as Escape) go to the page. A focused slider, select or text field gets Left and Right.
 - Pop-up settings: size (small, medium, large), background opacity, larger text, default corner, time on screen and how many stack per corner, with a sample that shows each change. Each pop-up can override them (`size`, `opacity`, `text_size`).
 - Pop-up buttons (`actions`): open a Home Assistant page or a web page, or close. Back on the dashboard closes the newest pop-up first. An opt-in setting lets pop-ups with buttons take the remote over other apps while they're up. Buttons are ignored on the token-less TvOverlay-compatible port.
@@ -23,7 +25,7 @@ Tested on a TCL Google TV (Android 14).
 - Sign-in reworked: a Sign in button on the dashboard when needed, a sign-in screen with progress, errors and a "Signed in" step, then straight back to the dashboard.
 - Fixed: a second service start killed the app on Android 14.
 
-First code drop, not yet built or tested on a TV.
+Also in this version:
 
 - Full-screen WebView dashboard with recovery: retry with back-off, renderer crash and freeze recovery, reload on network return, on long HA disconnects and nightly.
 - HA frontend bridge (external auth and external bus): sign in once on the TV or a long-lived token, HA kiosk mode, in-app navigation, connection status.

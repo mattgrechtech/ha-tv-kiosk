@@ -107,9 +107,13 @@ class HaBridge(
             if (trusted()) parse(payload)?.let { main.post { this@HaBridge.getExternalAuth(it) } }
         }
 
+        /**
+         * Ignored on this old path: it can't tell the dashboard from a frame inside it, and a frame
+         * shouldn't be able to sign the TV out. Signing out is in the app's settings.
+         */
         @JavascriptInterface
         fun revokeExternalAuth(payload: String) {
-            if (trusted()) parse(payload)?.let { main.post { this@HaBridge.revokeExternalAuth(it) } }
+            AppLog.w(TAG, "Sign-out request through the old bridge ignored")
         }
 
         @JavascriptInterface

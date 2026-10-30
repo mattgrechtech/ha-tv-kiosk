@@ -20,8 +20,10 @@ import java.util.concurrent.TimeUnit
 
 /**
  * A deliberately small HTTP/1.1 server for a LAN control API: one request per connection,
- * Content-Length bodies only (no chunked uploads), bounded headers and bodies, short timeouts
- * and a handful of worker threads. No Android dependencies, so it is unit-tested on the JVM.
+ * Content-Length bodies only (no chunked uploads), bounded headers and bodies, a time limit for
+ * the whole request (so a client trickling bytes can't hold a worker), at most three connections
+ * per address, and a handful of worker threads. No Android dependencies, so it is unit-tested on
+ * the JVM.
  */
 class HttpServer(
     private val port: Int,
@@ -54,6 +56,8 @@ class HttpServer(
     private val workers: ExecutorService = ThreadPoolExecutor(
         1, MAX_WORKERS, 30, TimeUnit.SECONDS, SynchronousQueue(),
     )
+    /** Open connections per client address. */
+    private val perAddress = mutableMapOf<String, Int>()
 
     val isRunning get() = socket?.isClosed == false
 
@@ -91,17 +95,42 @@ class HttpServer(
             } catch (e: IOException) {
                 continue
             }
+            val address = client.inetAddress?.hostAddress ?: ""
+            val admitted = synchronized(perAddress) {
+                val open = perAddress[address] ?: 0
+                if (open >= MAX_PER_ADDRESS) false else true.also { perAddress[address] = open + 1 }
+            }
+            if (!admitted) {
+                refuse(client)
+                continue
+            }
             try {
-                workers.execute { serve(client) }
-            } catch (e: RejectedExecutionException) {
-                // All workers busy: refuse rather than queue without limit.
-                runCatching {
-                    client.soTimeout = 2000
-                    write(client.getOutputStream(), Response(503, """{"ok":false,"error":"busy"}"""))
+                workers.execute {
+                    try {
+                        serve(client)
+                    } finally {
+                        release(address)
+                    }
                 }
-                runCatching { client.close() }
+            } catch (e: RejectedExecutionException) {
+                release(address)
+                // All workers busy: refuse rather than queue without limit.
+                refuse(client)
             }
         }
+    }
+
+    private fun release(address: String) = synchronized(perAddress) {
+        val open = (perAddress[address] ?: 1) - 1
+        if (open <= 0) perAddress.remove(address) else perAddress[address] = open
+    }
+
+    private fun refuse(client: Socket) {
+        runCatching {
+            client.soTimeout = 2000
+            write(client.getOutputStream(), Response(503, """{"ok":false,"error":"busy"}"""))
+        }
+        runCatching { client.close() }
     }
 
     private fun serve(client: Socket) {
@@ -109,7 +138,8 @@ class HttpServer(
             it.soTimeout = SOCKET_TIMEOUT_MILLIS
             val out = it.getOutputStream()
             val response = try {
-                val request = read(BufferedInputStream(it.getInputStream()), it.inetAddress?.hostAddress ?: "", maxBodyBytes)
+                val input = DeadlineInputStream(BufferedInputStream(it.getInputStream()), it, System.currentTimeMillis() + REQUEST_DEADLINE_MILLIS)
+                val request = read(input, it.inetAddress?.hostAddress ?: "", maxBodyBytes)
                 try {
                     handler(request)
                 } catch (e: Exception) {
@@ -126,7 +156,10 @@ class HttpServer(
 
     companion object {
         private const val MAX_WORKERS = 4
+        private const val MAX_PER_ADDRESS = 3
         private const val SOCKET_TIMEOUT_MILLIS = 10_000
+        /** The whole request (headers and body) must arrive within this time. */
+        private const val REQUEST_DEADLINE_MILLIS = 10_000L
         private const val MAX_HEADER_BYTES = 16 * 1024
 
         /** Parses one request. Throws [BadRequest] for anything it won't handle. */
@@ -232,4 +265,29 @@ class HttpServer(
             else -> "Status"
         }
     }
+}
+
+/** Fails reads once [deadline] (wall clock) has passed, and never waits for data beyond it. */
+private class DeadlineInputStream(
+    private val inner: InputStream,
+    private val socket: Socket,
+    private val deadline: Long,
+) : InputStream() {
+    private fun arm() {
+        val remaining = deadline - System.currentTimeMillis()
+        if (remaining <= 0) throw java.net.SocketTimeoutException("request took too long")
+        socket.soTimeout = remaining.toInt().coerceAtLeast(1)
+    }
+
+    override fun read(): Int {
+        arm()
+        return inner.read()
+    }
+
+    override fun read(b: ByteArray, off: Int, len: Int): Int {
+        arm()
+        return inner.read(b, off, len)
+    }
+
+    override fun available() = inner.available()
 }

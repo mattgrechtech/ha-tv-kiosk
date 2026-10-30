@@ -36,6 +36,16 @@ class HaAuth(private val settings: Settings) {
     @Throws(Failure::class)
     fun accessToken(force: Boolean): Token {
         synchronized(lock) {
+            if (settings[Keys.AUTH_MODE] != "none" && !settings.haCredentialsMatch()) {
+                val hadTokens = settings[Keys.HA_REFRESH_TOKEN].isNotEmpty() || settings[Keys.HA_LONG_LIVED_TOKEN].isNotEmpty()
+                cached = null
+                cachedUntilElapsed = 0
+                if (hadTokens) {
+                    AppLog.w(TAG, "Home Assistant's address changed: forgetting the old sign-in rather than sending it there")
+                    settings.clearHaCredentials()
+                    throw Failure.Invalid("Home Assistant's address changed: sign in again")
+                }
+            }
             when (settings[Keys.AUTH_MODE]) {
                 "token" -> {
                     val token = settings[Keys.HA_LONG_LIVED_TOKEN]
@@ -100,14 +110,18 @@ class HaAuth(private val settings: Settings) {
     fun signOut() = synchronized(lock) {
         val base = settings.haBaseUrl()
         val refreshToken = settings[Keys.HA_REFRESH_TOKEN]
-        if (base != null && refreshToken.isNotEmpty()) {
+        // Only the server that issued the token is told to revoke it.
+        if (base != null && refreshToken.isNotEmpty() && settings.haCredentialsMatch()) {
             try {
                 post("$base/auth/revoke", HaUrls.formBody("token" to refreshToken))
             } catch (e: IOException) {
                 AppLog.w(TAG, "Revoking the refresh token failed; forgetting it anyway", e)
             }
         }
-        settings.edit { clear(Keys.HA_REFRESH_TOKEN) }
+        settings.edit {
+            clear(Keys.HA_REFRESH_TOKEN)
+            clear(Keys.HA_CREDENTIAL_ORIGIN)
+        }
         cached = null
         cachedUntilElapsed = 0
     }

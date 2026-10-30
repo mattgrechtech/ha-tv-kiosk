@@ -1,6 +1,31 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+}
+
+/** The only version number to change; versionCode follows it (1.2.3 -> 10203). */
+val appVersion = "0.1.0"
+
+/**
+ * Release signing, from keystore.properties (git-ignored) or TVKIOSK_* environment variables
+ * (used by the GitHub release workflow). Without either, release builds are left unsigned.
+ */
+val signing: Map<String, String>? = run {
+    val file = rootProject.file("keystore.properties")
+    if (file.exists()) {
+        val props = Properties().apply { file.inputStream().use { load(it) } }
+        return@run props.stringPropertyNames().associateWith { props.getProperty(it) }
+    }
+    val env = System.getenv()
+    val store = env["TVKIOSK_KEYSTORE"] ?: return@run null
+    mapOf(
+        "storeFile" to store,
+        "storePassword" to env["TVKIOSK_KEYSTORE_PASSWORD"].orEmpty(),
+        "keyAlias" to env["TVKIOSK_KEY_ALIAS"].orEmpty(),
+        "keyPassword" to env["TVKIOSK_KEY_PASSWORD"].orEmpty(),
+    )
 }
 
 android {
@@ -13,8 +38,19 @@ android {
         applicationId = "io.github.mattgrechtech.tvkiosk"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionName = appVersion
+        versionCode = appVersion.split(".").map { it.toInt() }.let { (major, minor, patch) -> major * 10000 + minor * 100 + patch }
+    }
+
+    signingConfigs {
+        if (signing != null) {
+            create("release") {
+                storeFile = file(signing.getValue("storeFile"))
+                storePassword = signing["storePassword"]
+                keyAlias = signing["keyAlias"]
+                keyPassword = signing["keyPassword"]
+            }
+        }
     }
 
     buildTypes {
@@ -22,6 +58,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
         }
         debug {
             applicationIdSuffix = ".debug"

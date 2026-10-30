@@ -1,6 +1,6 @@
-# Build set-up (Windows)
+# Build set-up
 
-What's needed to build the app on a Windows PC, without Android Studio or an emulator. About 3–5 GB and half an hour. Test on a real TV over adb.
+What's needed to build the app without Android Studio or an emulator. The steps are for Windows; [macOS and Linux](#macos-and-linux) are the same tools with different commands. About 3–5 GB and half an hour. Test on a real TV over adb.
 
 | Piece | Why | Size |
 |---|---|---|
@@ -37,25 +37,9 @@ It should say `17.x`. If `JAVA_HOME` isn't set (Gradle complains), set it to the
    android --sdk=$env:ANDROID_HOME sdk install "platforms;android-35" "build-tools;35.0.0" "platform-tools"
    ```
 
-## 3. Gradle wrapper
+## 3. Gradle
 
-The repo has `gradle/wrapper/gradle-wrapper.properties` but not yet the wrapper files (`gradlew`, `gradlew.bat`, `gradle/wrapper/gradle-wrapper.jar`). Gradle generates them. Once only, download Gradle, check it against Gradle's published checksum, generate the wrapper, then delete the download:
-
-```powershell
-$v = "8.11.1"
-$tmp = Join-Path $env:TEMP "gradle-$v"
-New-Item -ItemType Directory -Force $tmp | Out-Null
-Invoke-WebRequest "https://services.gradle.org/distributions/gradle-$v-bin.zip" -OutFile "$tmp\gradle.zip"
-$raw = (Invoke-WebRequest "https://services.gradle.org/distributions/gradle-$v-bin.zip.sha256" -UseBasicParsing).Content
-$expected = $(if ($raw -is [byte[]]) { [Text.Encoding]::ASCII.GetString($raw) } else { [string]$raw }).Trim()
-$actual = (Get-FileHash "$tmp\gradle.zip" -Algorithm SHA256).Hash.ToLower()
-if ($actual -ne $expected) { throw "Gradle download checksum mismatch" }
-Expand-Archive "$tmp\gradle.zip" -DestinationPath $tmp
-& "$tmp\gradle-$v\bin\gradle.bat" wrapper --gradle-version $v
-Remove-Item -Recurse -Force $tmp
-```
-
-Run it from the repo folder. Commit the three generated files; from then on `.\gradlew.bat` fetches Gradle by itself.
+Nothing to install: the repo includes the Gradle wrapper (`gradlew`, `gradlew.bat`), which downloads Gradle 8.11.1 on first use.
 
 ## 4. Build and test
 
@@ -95,12 +79,31 @@ $env:JAVA_TOOL_OPTIONS = "-Djdk.net.unixdomain.tmpdir=$env:USERPROFILE\.jdk-sock
 
 To make it permanent, set the same `JAVA_TOOL_OPTIONS` as a user environment variable. Java then prints "Picked up JAVA_TOOL_OPTIONS" once per run, which is harmless.
 
-## Release builds (later)
+## macOS and Linux
 
-Release builds need a signing key. Create it once, keep it **outside the repo** in a password manager plus a backup (losing it means users must uninstall to update):
+- JDK 17: `brew install --cask temurin@17` (macOS) or your distribution's `openjdk-17-jdk`.
+- Android command-line tools: the same download for your platform, unzipped to `~/Android/Sdk/cmdline-tools/latest`; set `ANDROID_HOME=~/Android/Sdk` and add its `cmdline-tools/latest/bin` and `platform-tools` to `PATH`.
+- Then `./gradlew test assembleDebug`, and `./tools/provision.sh 192.168.1.60 "http://192.168.1.50:8123/"` to install.
+
+## Release builds
+
+Release builds are signed. Create a key once and keep it **outside the repo**, in a password manager plus a backup: losing it means everyone has to uninstall to update.
 
 ```powershell
 keytool -genkeypair -v -keystore $HOME\keys\tv-kiosk-release.jks -alias release -keyalg RSA -keysize 4096 -validity 10000
 ```
 
-Signing configuration comes when the first release is cut.
+Then either put a `keystore.properties` file in the repo folder (it's git-ignored):
+
+```properties
+storeFile=C:/Users/you/keys/tv-kiosk-release.jks
+storePassword=...
+keyAlias=release
+keyPassword=...
+```
+
+or set the environment variables `TVKIOSK_KEYSTORE`, `TVKIOSK_KEYSTORE_PASSWORD`, `TVKIOSK_KEY_ALIAS` and `TVKIOSK_KEY_PASSWORD`. `.\gradlew.bat assembleRelease` then writes `app/build/outputs/apk/release/app-release.apk`. Without a key it writes an unsigned APK, which Android won't install.
+
+GitHub builds a signed APK for every version tag (`v0.1.0`) when the repository has these secrets: `KEYSTORE_BASE64` (the .jks file, base64), `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`. See `.github/workflows/release.yml`.
+
+Version numbers: `versionName` in `app/build.gradle.kts` is the only one to change; `versionCode` is worked out from it (1.2.3 → 10203), so every release installs over the last.

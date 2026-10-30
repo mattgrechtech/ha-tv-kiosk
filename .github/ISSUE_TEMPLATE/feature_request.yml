@@ -1,0 +1,15 @@
+name: Feature request
+description: Something you'd like the app to do
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What do you want to do?
+      description: The situation and the outcome, rather than a particular solution.
+    validations:
+      required: true
+  - type: textarea
+    id: now
+    attributes:
+      label: How do you do it today?

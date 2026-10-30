@@ -13,6 +13,7 @@
     <string name="pin_title">Settings PIN</string>
     <string name="pin_hint">PIN</string>
     <string name="pin_wrong">Wrong PIN</string>
+    <string name="pin_locked">Too many wrong PINs. Try again in %1$d seconds.</string>
     <string name="settings_not_saved">Not saved</string>
     <string name="settings_sign_in">Sign in to Home Assistant</string>
     <string name="settings_sign_out">Sign out</string>
@@ -55,6 +56,8 @@
     <string name="panel_setup_title">Set up this TV</string>
     <string name="panel_setup_message">Choose what this TV shows: a Home Assistant dashboard or any web page.</string>
     <string name="panel_set_up">Set up</string>
+    <string name="panel_no_webview_title">This TV\'s web engine isn\'t working</string>
+    <string name="panel_no_webview_message">The app shows pages with Android System WebView. It\'s missing, turned off or being updated. Update or turn on Android System WebView (or Chrome) in the TV\'s app store or Settings → Apps, then try again.</string>
     <string name="panel_unreachable_web_title">Can\'t open the page</string>
     <string name="panel_server_answered">The server answered with error %1$d</string>
     <string name="panel_open_settings">Open settings</string>

@@ -79,9 +79,18 @@ object Dialogs {
     }
 
     /** Runs [onOk] straight away when no PIN is set, otherwise after the right PIN is entered. */
+    /** Wrong PINs in a row, and when the PIN may be tried again (it locks for longer each time). */
+    private var pinFailures = 0
+    private var pinLockedUntil = 0L
+
     fun requirePin(activity: Activity, pin: String, onOk: () -> Unit) {
         if (pin.isEmpty()) {
             onOk()
+            return
+        }
+        val wait = (pinLockedUntil - android.os.SystemClock.elapsedRealtime()) / 1000
+        if (wait > 0) {
+            Toast.makeText(activity, activity.getString(R.string.pin_locked, wait + 1), Toast.LENGTH_LONG).show()
             return
         }
         val input = EditText(activity).apply {
@@ -92,8 +101,18 @@ object Dialogs {
             .setTitle(R.string.pin_title)
             .setView(input)
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                if (sameSecret(input.text.toString(), pin)) onOk()
-                else Toast.makeText(activity, R.string.pin_wrong, Toast.LENGTH_SHORT).show()
+                if (sameSecret(input.text.toString(), pin)) {
+                    pinFailures = 0
+                    onOk()
+                } else {
+                    pinFailures++
+                    // From the fifth wrong PIN: 30 s, then 1, 2, 4 ... minutes, up to an hour.
+                    if (pinFailures >= 5) {
+                        val seconds = minOf(3600L, 30L shl (pinFailures - 5))
+                        pinLockedUntil = android.os.SystemClock.elapsedRealtime() + seconds * 1000
+                    }
+                    Toast.makeText(activity, R.string.pin_wrong, Toast.LENGTH_SHORT).show()
+                }
             }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
