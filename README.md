@@ -4,6 +4,14 @@
 
 > Status: **pre-alpha.** Tested on one TCL Google TV (Android 14), including a 72-hour run. Reports from other TVs are very welcome: see [Contributing](CONTRIBUTING.md). Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
 
+<p align="center">
+  <img src="docs/screenshots/dashboard-popup.jpg" width="49%" alt="A Home Assistant dashboard with the remote's highlight on a card and a doorbell pop-up with buttons">
+  <img src="docs/screenshots/setup.jpg" width="49%" alt="First-run setup: choose Home Assistant or a web page">
+  <img src="docs/screenshots/settings.jpg" width="49%" alt="Settings laid out like the TV's own settings">
+  <img src="docs/screenshots/popup-settings.jpg" width="49%" alt="Pop-up settings with a sample pop-up">
+</p>
+<p align="center"><sub>Shown with Home Assistant's public demo.</sub></p>
+
 ## What it does
 
 - **Set up with the remote:** first-run setup finds Home Assistant on the network, signs in and lists your dashboards. Or choose "A web page" for any site: no Home Assistant needed.

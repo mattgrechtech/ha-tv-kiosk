@@ -139,11 +139,20 @@ class PopupManager(private val context: Context) {
                     AppLog.w(TAG, "Can't change pop-up focus", e)
                 }
             }
+            // Buttons only look selectable when they really have the remote; otherwise Android
+            // would still draw the first one as focused inside its own window.
+            entries.values.filter { it.corner == which }.forEach { setButtonsFocusable(it.view, want && it === newest) }
             if (want) newest?.view?.let { view -> main.post { firstButton(view)?.requestFocus() } }
         }
     }
 
     private fun firstButton(view: View): View? = view.findViewWithTag(FIRST_BUTTON)
+
+    private fun setButtonsFocusable(view: View, focusable: Boolean) {
+        val row = view.findViewWithTag<ViewGroup>(BUTTON_ROW) ?: return
+        for (i in 0 until row.childCount) row.getChildAt(i).isFocusable = focusable
+        if (!focusable) row.findFocus()?.clearFocus()
+    }
 
     private fun remove(entry: Entry) {
         main.removeCallbacks(entry.dismiss)
@@ -270,6 +279,7 @@ class PopupManager(private val context: Context) {
         val row = LinearLayout(context).apply {
             orientation = LinearLayout.HORIZONTAL
             setPadding(dp(16), 0, dp(16), dp(14))
+            tag = BUTTON_ROW
         }
         val all = popup.actions.map { it.label to { onAction(it) } } + (CLOSE_LABEL to {})
         val views = all.mapIndexed { index, (label, run) ->
@@ -283,6 +293,8 @@ class PopupManager(private val context: Context) {
                 minimumHeight = dp(44)
                 setPadding(dp(18), dp(6), dp(18), dp(6))
                 if (index == 0) tag = FIRST_BUTTON
+                // Until updateFocus says this pop-up has the remote.
+                isFocusable = false
                 setOnKeyListener { _, keyCode, event ->
                     if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
                         if (event.action == KeyEvent.ACTION_UP) clear(popup.id)
@@ -353,6 +365,7 @@ class PopupManager(private val context: Context) {
         const val CARD_RGB = 0x1E1F22
         const val LARGE_TEXT = 1.25f
         const val FIRST_BUTTON = "first-button"
+        const val BUTTON_ROW = "button-row"
         const val CLOSE_LABEL = "Close"
         val DEFAULT_ACCENT = 0xFF03A9F4.toInt()
     }
