@@ -69,7 +69,9 @@ object SettingsJson {
 
     private fun coerce(key: Key<*>, raw: Any?): Any? = when {
         raw == null || raw == JSONObject.NULL -> null
+        // A list (e.g. "pages") may come as a JSON array of strings.
         key.default is String -> raw as? String ?: (raw as? Number)?.toString()
+            ?: (raw as? JSONArray)?.let { array -> (0 until array.length()).joinToString("\n") { array.optString(it) } }
         key.default is Int -> when (raw) {
             is Int -> raw
             is Long -> if (raw in Int.MIN_VALUE..Int.MAX_VALUE) raw.toInt() else null

@@ -36,6 +36,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/jso
 | `GET /settings` | | Settings as JSON (no secrets) |
 | `POST /settings` | partial settings JSON | Change settings; answers which keys were applied and which were rejected |
 
+Settings for what the TV shows: `mode` (`home_assistant` or `web`), `start_url`, `pages` (more pages to rotate through: one URL per line, or a JSON array), `rotate_seconds` (0 = off, else 10-86400), `screen_off_from` / `screen_off_to` (hours 0-23 when the screen goes black; `screen_off_from` -1 = never). For example `{"pages": ["http://192.168.1.50:8123/cameras"], "rotate_seconds": 60}`.
+
 Status codes: `200` done, `202` started (speech, sound), `400` bad input, `401` token, `404` unknown route, `405` wrong method, `409` can't right now (e.g. the dashboard isn't open), `421` wrong Host, `429` blocked for bad tokens.
 
 ### Pop-ups

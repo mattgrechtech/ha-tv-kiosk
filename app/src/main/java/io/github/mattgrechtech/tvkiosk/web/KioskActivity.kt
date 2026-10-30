@@ -34,17 +34,22 @@ import io.github.mattgrechtech.tvkiosk.KioskApp
 import io.github.mattgrechtech.tvkiosk.R
 import io.github.mattgrechtech.tvkiosk.control.DashboardSurface
 import io.github.mattgrechtech.tvkiosk.control.KioskState
+import io.github.mattgrechtech.tvkiosk.control.Schedule
 import io.github.mattgrechtech.tvkiosk.service.KioskService
 import io.github.mattgrechtech.tvkiosk.settings.Keys
+import io.github.mattgrechtech.tvkiosk.settings.Settings
 import io.github.mattgrechtech.tvkiosk.ui.Dialogs
 import io.github.mattgrechtech.tvkiosk.ui.MessagePanel
 import io.github.mattgrechtech.tvkiosk.ui.SettingsActivity
+import io.github.mattgrechtech.tvkiosk.ui.SetupActivity
 import java.util.Calendar
 import io.github.mattgrechtech.tvkiosk.diag.AppLog
 import io.github.mattgrechtech.tvkiosk.diag.CrashGuard
 
 /**
- * The dashboard: one full-screen WebView showing Home Assistant, kept alive.
+ * The dashboard: one full-screen WebView showing Home Assistant (or, in web mode, any page),
+ * kept alive. With more than one page set, it rotates through them while nobody uses the remote,
+ * and the screen can go black for set hours each night.
  *
  * Recovery: a failed load retries with back-off; a crashed or frozen renderer gets a new WebView;
  * the page reloads when the network comes back, when HA's connection stays down too long, and
@@ -79,6 +84,13 @@ class KioskActivity : Activity(), DashboardSurface {
     private var heartbeatPending = 0
     private var lastNightlyReloadDay = -1
     private var resumed = false
+
+    /** Which of [Settings.pages] is showing, when it changed, and when the remote was last used. */
+    private var pageIndex = 0
+    private var pageShownAt = 0L
+    private var lastInteraction = 0L
+    /** True while the night schedule has the screen black, so only the schedule turns it back on. */
+    private var nightBlank = false
 
     private var centreDownAt = 0L
     private var centreLongPressed = false
@@ -123,7 +135,7 @@ class KioskActivity : Activity(), DashboardSurface {
         registerNetworkCallback()
 
         applyScreen(app.state.screen, app.state.dimLevel)
-        startDashboard()
+        startDashboard(launchSetup = true)
         if (CrashGuard.takeUnseen(this)) {
             CrashGuard.clearGaveUp(this)
             app.controller.execute("notify", org.json.JSONObject()
@@ -149,6 +161,7 @@ class KioskActivity : Activity(), DashboardSurface {
         app.state.update { dashboardVisible(true) }
         app.controller.takePendingUrl()?.let { loadUrl(it) }
         scheduleTick()
+        scheduleRotation()
     }
 
     override fun onPause() {
@@ -156,6 +169,7 @@ class KioskActivity : Activity(), DashboardSurface {
         resumed = false
         app.state.update { dashboardVisible(false) }
         main.removeCallbacks(tick)
+        main.removeCallbacks(rotation)
         // Another app is in front: stop spending CPU on a dashboard nobody sees.
         webView?.onPause()
     }
@@ -177,14 +191,18 @@ class KioskActivity : Activity(), DashboardSurface {
 
     // ---- the WebView -----------------------------------------------------------------------
 
-    private fun startDashboard() {
+    /** Opens the start page. Nothing set yet: first-run setup ([launchSetup] opens it straight away). */
+    private fun startDashboard(launchSetup: Boolean = false) {
         // With only a Home Assistant address set, show HA's home page until a dashboard is chosen.
-        val start = app.controller.takePendingUrl()
-            ?: app.settings[Keys.START_URL].ifEmpty { app.settings.haBaseUrl()?.let { "$it/" } ?: "" }
+        pageIndex = 0
+        pageShownAt = SystemClock.elapsedRealtime()
+        val start = app.controller.takePendingUrl() ?: app.settings.pages().firstOrNull().orEmpty()
         if (start.isEmpty()) {
+            destroyWebView()
             showPanel(Panel.NO_URL, getString(R.string.panel_setup_title), getString(R.string.panel_setup_message), MessagePanel.ICON_TV,
-                MessagePanel.Action(getString(R.string.panel_open_settings), primary = true) { openSettings() })
-            startActivity(Intent(this, SettingsActivity::class.java))
+                MessagePanel.Action(getString(R.string.panel_set_up), primary = true) { openSetup() },
+                MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() })
+            if (launchSetup) openSetup()
             return
         }
         createWebView()
@@ -294,7 +312,7 @@ class KioskActivity : Activity(), DashboardSurface {
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
             if (request.isForMainFrame && response.statusCode >= 500) {
-                onMainFrameFailed("Home Assistant answered ${response.statusCode}")
+                onMainFrameFailed(getString(R.string.panel_server_answered, response.statusCode))
             }
         }
 
@@ -313,7 +331,7 @@ class KioskActivity : Activity(), DashboardSurface {
         app.state.update { error(message) }
         val delay = RETRY_DELAYS_SECONDS[retryDelayIndex.coerceAtMost(RETRY_DELAYS_SECONDS.lastIndex)]
         retryDelayIndex++
-        showPanel(Panel.ERROR, getString(R.string.panel_unreachable_title), getString(R.string.panel_unreachable_message, message, delay), MessagePanel.ICON_WARNING,
+        showPanel(Panel.ERROR, unreachableTitle(), getString(R.string.panel_unreachable_message, message, delay), MessagePanel.ICON_WARNING,
             MessagePanel.Action(getString(R.string.panel_try_now), primary = true) { retryNow() },
             MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() })
         main.removeCallbacks(retry)
@@ -369,7 +387,7 @@ class KioskActivity : Activity(), DashboardSurface {
                         getString(R.string.panel_sign_in_message) else failure.message ?: ""
                 )
                 is HaAuth.Failure.Unavailable -> showPanel(
-                    Panel.ERROR, getString(R.string.panel_unreachable_title), failure.message ?: "", MessagePanel.ICON_WARNING,
+                    Panel.ERROR, unreachableTitle(), failure.message ?: "", MessagePanel.ICON_WARNING,
                     MessagePanel.Action(getString(R.string.panel_try_now), primary = true) { hidePanel(); reload(false, "sign-in retry") },
                     MessagePanel.Action(getString(R.string.menu_settings)) { openSettings() },
                 )
@@ -387,6 +405,7 @@ class KioskActivity : Activity(), DashboardSurface {
     private val tick: Runnable = Runnable {
         heartbeat()
         nightlyReload()
+        nightScreen()
         scheduleTick()
     }
 
@@ -417,6 +436,60 @@ class KioskActivity : Activity(), DashboardSurface {
             lastNightlyReloadDay = day
             reload(true, "nightly")
         }
+    }
+
+    /** Blacks the screen during the night hours; the remote wakes it for a few minutes at a time. */
+    private fun nightScreen() {
+        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
+        val night = Schedule.inNightWindow(hour, app.settings[Keys.SCREEN_OFF_FROM], app.settings[Keys.SCREEN_OFF_TO])
+        val idle = SystemClock.elapsedRealtime() - lastInteraction >= Schedule.NIGHT_WAKE_MILLIS
+        if (night && idle && app.state.screen == KioskState.Screen.ON) {
+            AppLog.i(TAG, "Night hours: screen black")
+            app.controller.setScreen(KioskState.Screen.BLANK, 100)
+            nightBlank = true
+        } else if (!night && nightBlank) {
+            nightBlank = false
+            if (app.state.screen == KioskState.Screen.BLANK) app.controller.setScreen(KioskState.Screen.ON, 0)
+        }
+    }
+
+    // ---- page rotation -----------------------------------------------------------------------
+
+    private val rotation: Runnable = Runnable {
+        val pages = app.settings.pages()
+        val now = SystemClock.elapsedRealtime()
+        val busy = panel.isShowing || mainFrameFailed || app.state.screen == KioskState.Screen.BLANK
+        if (pages.size > 1 && !busy && Schedule.rotationDue(now, pageShownAt, lastInteraction, app.settings[Keys.ROTATE_SECONDS])) {
+            showPage(Schedule.nextIndex(pageIndex, pages.size), pages)
+        }
+        scheduleRotation()
+    }
+
+    private fun scheduleRotation() {
+        main.removeCallbacks(rotation)
+        if (resumed && app.settings[Keys.ROTATE_SECONDS] > 0) main.postDelayed(rotation, ROTATION_CHECK_MILLIS)
+    }
+
+    /**
+     * Shows page [index] of [pages]. A Home Assistant page on the same server is opened inside the
+     * running frontend, which is instant and keeps the connection; anything else loads normally.
+     */
+    private fun showPage(index: Int, pages: List<String> = app.settings.pages()) {
+        val url = pages.getOrNull(index) ?: return
+        pageIndex = index
+        pageShownAt = SystemClock.elapsedRealtime()
+        AppLog.i(TAG, "Showing page ${index + 1} of ${pages.size}")
+        val base = app.settings.haBaseUrl()
+        val path = if (base != null && Settings.originOf(url) == base) url.substring(base.length).ifEmpty { "/" } else null
+        if (path != null && navigateHa(path)) {
+            requestedUrl = url
+            return
+        }
+        if (webView == null) createWebView()
+        hidePanel()
+        main.removeCallbacks(retry)
+        retryDelayIndex = 0
+        open(url)
     }
 
     // ---- network -----------------------------------------------------------------------------
@@ -457,6 +530,8 @@ class KioskActivity : Activity(), DashboardSurface {
     // ---- DashboardSurface --------------------------------------------------------------------
 
     override fun loadUrl(url: String) {
+        // A page asked for by a command holds the rotation like a key press does.
+        lastInteraction = SystemClock.elapsedRealtime()
         if (webView == null) createWebView()
         hidePanel()
         main.removeCallbacks(retry)
@@ -512,6 +587,7 @@ class KioskActivity : Activity(), DashboardSurface {
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
         val code = event.keyCode
+        if (event.action == KeyEvent.ACTION_DOWN) lastInteraction = SystemClock.elapsedRealtime()
         val isCentre = code == KeyEvent.KEYCODE_DPAD_CENTER || code == KeyEvent.KEYCODE_ENTER ||
             code == KeyEvent.KEYCODE_NUMPAD_ENTER
 
@@ -583,19 +659,21 @@ class KioskActivity : Activity(), DashboardSurface {
 
     private fun showQuickMenu() {
         val pointerLabel = getString(if (remoteMode == "pointer") R.string.menu_pointer_off else R.string.menu_pointer_on)
-        Dialogs.list(
-            this,
-            getString(R.string.app_name),
-            listOf(
-                getString(R.string.menu_reload) to { reload(false, "menu") },
-                pointerLabel to { setPointer(remoteMode != "pointer") },
-                getString(R.string.menu_start_page) to {
-                    val start = app.settings[Keys.START_URL]
-                    if (start.isNotEmpty()) loadUrl(start)
-                },
-                getString(R.string.menu_settings) to { openSettings() },
-            ),
+        val pages = app.settings.pages()
+        val items = mutableListOf<Pair<String, () -> Unit>>(
+            getString(R.string.menu_reload) to { reload(false, "menu") },
+            pointerLabel to { setPointer(remoteMode != "pointer") },
         )
+        if (pages.size > 1) items += getString(R.string.menu_next_page) to { showPage(Schedule.nextIndex(pageIndex, pages.size), pages) }
+        items += getString(R.string.menu_start_page) to { if (pages.isNotEmpty()) showPage(0, pages) }
+        items += getString(R.string.menu_settings) to { openSettings() }
+        Dialogs.list(this, getString(R.string.app_name), items)
+    }
+
+    private fun openSetup() {
+        Dialogs.requirePin(this, app.settings[Keys.SETTINGS_PIN]) {
+            startActivity(Intent(this, SetupActivity::class.java))
+        }
     }
 
     private fun openSettings() {
@@ -609,8 +687,14 @@ class KioskActivity : Activity(), DashboardSurface {
     private fun onSettingsChanged(changed: Set<String>) {
         if (changed.contains(Keys.KEEP_SCREEN_ON.name)) applyWindowFlags()
         if (changed.contains(Keys.REMOTE_MODE.name)) applyRemoteMode(app.settings[Keys.REMOTE_MODE])
+        if (changed.any { it in ROTATION_KEYS }) {
+            pageShownAt = SystemClock.elapsedRealtime()
+            if (pageIndex >= app.settings.pages().size) pageIndex = 0
+            scheduleRotation()
+        }
+        if (changed.contains(Keys.SCREEN_OFF_FROM.name) || changed.contains(Keys.SCREEN_OFF_TO.name)) nightScreen()
         val reloadKeys = setOf(
-            Keys.START_URL.name, Keys.HA_URL.name, Keys.AUTH_MODE.name,
+            Keys.MODE.name, Keys.START_URL.name, Keys.HA_URL.name, Keys.AUTH_MODE.name,
             Keys.HA_LONG_LIVED_TOKEN.name, Keys.HA_REFRESH_TOKEN.name,
         )
         if (changed.any { it in reloadKeys }) {
@@ -664,6 +748,9 @@ class KioskActivity : Activity(), DashboardSurface {
         webView?.requestFocus()
     }
 
+    private fun unreachableTitle() =
+        getString(if (app.settings.isWebMode()) R.string.panel_unreachable_web_title else R.string.panel_unreachable_title)
+
     private fun openSignIn() {
         startActivity(Intent(this, LoginActivity::class.java))
     }
@@ -675,5 +762,7 @@ class KioskActivity : Activity(), DashboardSurface {
         val RETRY_DELAYS_SECONDS = intArrayOf(5, 10, 20, 30, 60)
         const val TICK_MILLIS = 30_000L
         const val LONG_PRESS_MILLIS = 800L
+        const val ROTATION_CHECK_MILLIS = 5_000L
+        val ROTATION_KEYS = setOf(Keys.PAGES.name, Keys.ROTATE_SECONDS.name)
     }
 }

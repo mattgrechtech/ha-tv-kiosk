@@ -65,6 +65,12 @@
             android:windowSoftInputMode="adjustResize" />
 
         <activity
+            android:name=".ui.SetupActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Kiosk.Settings"
+            android:windowSoftInputMode="adjustResize" />
+
+        <activity
             android:name=".web.LoginActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />

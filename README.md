@@ -1,11 +1,13 @@
 # TV Kiosk (working name)
 
-**A free, open-source Android TV / Google TV app that shows a Home Assistant dashboard full screen and lets Home Assistant control the TV.** One app instead of a kiosk browser, adb scripts and a separate pop-up app.
+**A free, open-source Android TV / Google TV app that shows a Home Assistant dashboard (or any web page) full screen and lets Home Assistant control the TV.** One app instead of a kiosk browser, adb scripts and a separate pop-up app.
 
-> Status: **pre-alpha.** It builds, its unit tests pass and Android Lint is clean; it has not yet run on a real TV. Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
+> Status: **pre-alpha.** Tested on one TCL Google TV (Android 14). Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
 
 ## What it does
 
+- **Set up with the remote:** first-run setup finds Home Assistant on the network, signs in and lists your dashboards. Or choose "A web page" for any site: no Home Assistant needed.
+- **Several pages:** rotate through dashboards or web pages; the remote holds the current one. A night schedule blacks the screen for set hours.
 - **Dashboard:** any HA dashboard full screen, signed in without typing a password on the TV, HA's header and sidebar hidden (HA's own kiosk mode, no extra card).
 - **Stays up:** retries failed loads with back-off; replaces a crashed or frozen WebView; reloads when the network comes back, when HA stays unreachable, and optionally every night.
 - **Remote-friendly:** Back goes back, then home. Hold **OK** (or press Menu) for a quick menu: reload, pointer, start page, settings. An optional on-screen **pointer** for cards that the D-pad can't reach.
@@ -28,7 +30,8 @@ Not included on purpose: remote shell or script injection, camera motion detecti
    ```bash
    ./tools/provision.sh 192.168.1.60 "http://192.168.1.50:8123/house?tv=1"
    ```
-3. Sign-in: either HA's `trusted_networks` for the TV (see the kit's [TV dashboard guide](https://github.com/mattgrechtech/ha-tv-kit/blob/main/docs/04-tv-dashboard.md)), or Settings → Sign-in → *Sign in once on this TV*, then *Sign in to Home Assistant*.
+   Or install the APK any other way and open the app: first-run setup does the rest with the remote.
+3. Sign-in: setup signs in for you. Alternatively, HA's `trusted_networks` for the TV (see the kit's [TV dashboard guide](https://github.com/mattgrechtech/ha-tv-kit/blob/main/docs/04-tv-dashboard.md)).
 4. Connect Home Assistant: [docs/home-assistant.md](docs/home-assistant.md).
 
 The example IPs are placeholders: `192.168.1.50` for Home Assistant, `192.168.1.60` for a TV.
@@ -56,7 +59,7 @@ app/src/main/java/io/github/mattgrechtech/tvkiosk/
   api/                 HTTP server, REST routes, TvOverlay-compatible endpoint
   mqtt/                MQTT client and HA discovery
   service/             foreground service, boot and adb receivers
-  ui/                  settings screen and dialogs
+  ui/                  first-run setup, settings screen and dialogs
 app/src/test/          unit tests for everything that doesn't need Android
 tools/                 provisioning scripts, banner/icon generator
 docs/

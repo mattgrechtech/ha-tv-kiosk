@@ -27,7 +27,9 @@ object Keys {
         if (value.isEmpty() || value.startsWith("http://") || value.startsWith("https://")) null
         else "must start with http:// or https://"
 
-    // Dashboard
+    // What the TV shows
+    /** home_assistant: a Home Assistant dashboard (sign-in, picker, pop-up bridge); web: any web page. */
+    val MODE = Key("mode", "home_assistant", check = { if (it in MODES) null else "must be one of $MODES" })
     val START_URL = Key("start_url", "", check = ::url)
     /** Home Assistant base URL. Empty means "the origin of the start URL". */
     val HA_URL = Key("ha_url", "", check = ::url)
@@ -38,6 +40,24 @@ object Keys {
     val BOOT_START = Key("boot_start", false)
     /** buttons: arrows jump between clickable items; pointer: an on-screen pointer; page: arrows go to the page. */
     val REMOTE_MODE = Key("remote_mode", "buttons", check = { if (it in REMOTE_MODES) null else "must be one of $REMOTE_MODES" })
+
+    // Rotation and schedule
+    /** More pages to rotate through after the start page, one URL per line. */
+    val PAGES = Key("pages", "", check = { value ->
+        splitPages(value).firstNotNullOfOrNull { page -> url(page)?.let { "has a line that $it" } }
+    })
+    /** Seconds on each page before the next; 0 turns rotation off. */
+    val ROTATE_SECONDS = Key("rotate_seconds", 0, check = {
+        if (it == 0 || it in 10..86_400) null else "must be 0 (off) or 10-86400"
+    })
+    /** Hour the screen goes black each night; -1 is never. */
+    val SCREEN_OFF_FROM = Key("screen_off_from", -1, check = {
+        if (it in -1..23) null else "must be -1 (never) or an hour 0-23"
+    })
+    /** Hour the screen comes back. */
+    val SCREEN_OFF_TO = Key("screen_off_to", 7, check = {
+        if (it in 0..23) null else "must be an hour 0-23"
+    })
 
     // Recovery
     val RELOAD_ON_NETWORK = Key("reload_on_network", true)
@@ -76,14 +96,19 @@ object Keys {
         if (it.isEmpty() || (it.length in 4..8 && it.all(Char::isDigit))) null else "must be 4-8 digits"
     })
 
+    val MODES = listOf("home_assistant", "web")
     val AUTH_MODES = listOf("none", "login", "token")
     val REMOTE_MODES = listOf("buttons", "pointer", "page")
+
+    /** The non-blank lines of a [PAGES] value, trimmed. */
+    fun splitPages(value: String): List<String> = value.lines().map { it.trim() }.filter { it.isNotEmpty() }
 
     private fun topicSegment(value: String) =
         if (value.isNotEmpty() && value.none { it in "+#/ " }) null else "must be one topic level, no + # / or spaces"
 
     val ALL: List<Key<*>> = listOf(
-        START_URL, HA_URL, AUTH_MODE, HA_KIOSK_MODE, KEEP_SCREEN_ON, BOOT_START, REMOTE_MODE,
+        MODE, START_URL, HA_URL, AUTH_MODE, HA_KIOSK_MODE, KEEP_SCREEN_ON, BOOT_START, REMOTE_MODE,
+        PAGES, ROTATE_SECONDS, SCREEN_OFF_FROM, SCREEN_OFF_TO,
         RELOAD_ON_NETWORK, RELOAD_ON_DISCONNECT_SECONDS, NIGHTLY_RELOAD_HOUR,
         API_ENABLED, API_PORT, TVOVERLAY_COMPAT, TVOVERLAY_PORT,
         MQTT_ENABLED, MQTT_HOST, MQTT_PORT, MQTT_TLS, MQTT_USER, MQTT_BASE_TOPIC, MQTT_DISCOVERY_PREFIX,
@@ -123,11 +148,24 @@ class Settings(private val plain: KeyValueStore, private val secrets: KeyValueSt
 
     fun removeListener(listener: (Set<String>) -> Unit) = synchronized(listeners) { listeners -= listener }
 
-    /** The Home Assistant origin the app trusts: the HA URL if set, else the start URL's origin. */
+    /** True when the TV shows any web page rather than Home Assistant. */
+    fun isWebMode(): Boolean = get(Keys.MODE) == "web"
+
+    /**
+     * The Home Assistant origin the app trusts: the HA URL if set, else the start URL's origin.
+     * Null in web mode, so no page gets Home Assistant's sign-in or the app bridge.
+     */
     fun haBaseUrl(): String? {
+        if (isWebMode()) return null
         val explicit = get(Keys.HA_URL).trimEnd('/')
         if (explicit.isNotEmpty()) return originOf(explicit)
         return originOf(get(Keys.START_URL))
+    }
+
+    /** Every page the dashboard shows: the start page (HA's home page if unset), then [Keys.PAGES]. */
+    fun pages(): List<String> {
+        val start = get(Keys.START_URL).ifEmpty { haBaseUrl()?.let { "$it/" } ?: "" }
+        return (listOf(start) + Keys.splitPages(get(Keys.PAGES))).filter { it.isNotEmpty() }
     }
 
     inner class Editor {

@@ -10,7 +10,6 @@ import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.os.SystemClock
 import android.provider.Settings as AndroidSettings
 import android.text.TextUtils
 import android.text.format.DateUtils
@@ -31,9 +30,8 @@ import io.github.mattgrechtech.tvkiosk.diag.CrashGuard
 import io.github.mattgrechtech.tvkiosk.diag.Diagnostics
 import io.github.mattgrechtech.tvkiosk.settings.Key
 import io.github.mattgrechtech.tvkiosk.settings.Keys
+import io.github.mattgrechtech.tvkiosk.settings.Settings
 import io.github.mattgrechtech.tvkiosk.settings.SettingsJson
-import io.github.mattgrechtech.tvkiosk.web.HaAuth
-import io.github.mattgrechtech.tvkiosk.web.HaDashboards
 import io.github.mattgrechtech.tvkiosk.web.LoginActivity
 import org.json.JSONObject
 import java.io.File
@@ -69,12 +67,16 @@ class SettingsActivity : Activity() {
     private lateinit var panel: MessagePanel
     private val main = Handler(Looper.getMainLooper())
     private var selected = 0
+    /** The mode the rail was built for; a change (setup backed out of half-way) rebuilds it. */
+    private var builtForWeb = false
+    private lateinit var picker: DashboardPicker
 
     private val stateListener: () -> Unit = { main.post { updateRailStatus() } }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = application as KioskApp
+        builtForWeb = app.settings.isWebMode()
         pages = buildPages()
 
         val root = FrameLayout(this).apply { setBackgroundColor(TvUi.BACKGROUND) }
@@ -85,6 +87,7 @@ class SettingsActivity : Activity() {
         panel = MessagePanel(this)
         root.addView(panel, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         setContentView(root)
+        picker = DashboardPicker(this, panel, onSignIn = { signIn() }, onCancel = { focusContent() })
 
         selected = intent.getIntExtra(EXTRA_PAGE, 0).coerceIn(0, pages.lastIndex)
         select(selected)
@@ -94,6 +97,10 @@ class SettingsActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (app.settings.isWebMode() != builtForWeb) {
+            recreate()
+            return
+        }
         // Back from the sign-in screen or the overlay permission screen: show what changed.
         refresh()
         updateRailStatus()
@@ -337,6 +344,12 @@ class SettingsActivity : Activity() {
     }
 
     private fun updateRailStatus() {
+        if (app.settings.isWebMode()) {
+            val host = Settings.originOf(app.settings[Keys.START_URL])?.substringAfter("://")
+            railStatus.text = if (host == null) getString(R.string.rail_no_page) else getString(R.string.rail_web, host)
+            railStatus.setTextColor(if (host == null) TvUi.WARNING else TvUi.TEXT_SECONDARY)
+            return
+        }
         val mode = app.settings[Keys.AUTH_MODE]
         val signedIn = when (mode) {
             "login" -> app.settings[Keys.HA_REFRESH_TOKEN].isNotEmpty()
@@ -356,9 +369,9 @@ class SettingsActivity : Activity() {
 
     // ---- pages -------------------------------------------------------------------------------
 
-    private fun buildPages() = listOf(
-        Page("📺", R.string.page_dashboard) { dashboardRows() },
-        Page("🔑", R.string.page_sign_in) { signInRows() },
+    private fun buildPages() = listOfNotNull(
+        if (builtForWeb) Page("🌐", R.string.page_web) { dashboardRows() } else Page("📺", R.string.page_dashboard) { dashboardRows() },
+        if (builtForWeb) null else Page("🔑", R.string.page_sign_in) { signInRows() },
         Page("🎮", R.string.page_screen) { screenRows() },
         Page("🔄", R.string.page_recovery) { recoveryRows() },
         Page("💬", R.string.page_popups) { popupRows() },
@@ -368,18 +381,88 @@ class SettingsActivity : Activity() {
     )
 
     private fun dashboardRows(): List<Row> {
+        val web = app.settings.isWebMode()
         val start = app.settings[Keys.START_URL]
         val ha = app.settings[Keys.HA_URL]
-        return listOf(
-            Row.Action(getString(R.string.row_pick_dashboard), getString(R.string.row_pick_dashboard_sub)) { pickDashboard() },
-            Row.Value(getString(R.string.label_start_url), start.ifEmpty { getString(R.string.value_not_set) }) {
-                editText(Keys.START_URL, getString(R.string.label_start_url), getString(R.string.edit_start_url_message))
-            },
-            Row.Value(getString(R.string.row_ha_address), ha.ifEmpty { getString(R.string.value_same_as_start) }) {
-                editText(Keys.HA_URL, getString(R.string.row_ha_address), getString(R.string.edit_ha_url_message))
-            },
-            Row.Toggle(getString(R.string.label_ha_kiosk_mode), getString(R.string.row_kiosk_mode_sub), Keys.HA_KIOSK_MODE),
+        val rows = mutableListOf<Row>(
+            Row.Value(getString(R.string.row_shows), getString(if (web) R.string.mode_web else R.string.mode_ha)) { changeMode() },
         )
+        if (!web) rows += Row.Action(getString(R.string.row_pick_dashboard), getString(R.string.row_pick_dashboard_sub)) { pickDashboard() }
+        rows += Row.Value(getString(R.string.label_start_url), start.ifEmpty { getString(if (web) R.string.value_not_set else R.string.value_ha_home) }) {
+            editText(Keys.START_URL, getString(R.string.label_start_url), getString(if (web) R.string.edit_web_url_message else R.string.edit_start_url_message))
+        }
+        if (!web) {
+            rows += Row.Value(getString(R.string.row_ha_address), ha.ifEmpty { getString(R.string.value_same_as_start) }) {
+                editText(Keys.HA_URL, getString(R.string.row_ha_address), getString(R.string.edit_ha_url_message))
+            }
+            rows += Row.Toggle(getString(R.string.label_ha_kiosk_mode), getString(R.string.row_kiosk_mode_sub), Keys.HA_KIOSK_MODE)
+        }
+        rows += rotationRows()
+        return rows
+    }
+
+    /** The extra pages to rotate through, how long each shows, and adding more. */
+    private fun rotationRows(): List<Row> {
+        val extra = Keys.splitPages(app.settings[Keys.PAGES])
+        val seconds = app.settings[Keys.ROTATE_SECONDS]
+        val rows = mutableListOf<Row>(Row.Header(getString(R.string.header_rotation)))
+        rows += Row.Value(getString(R.string.row_rotate), if (seconds == 0) getString(R.string.value_rotate_off) else durationLabel(seconds)) {
+            choose(getString(R.string.row_rotate), Keys.ROTATE_SECONDS,
+                listOf(getString(R.string.value_rotate_off) to 0) + ROTATE_CHOICES.map { durationLabel(it) to it })
+        }
+        extra.forEachIndexed { index, url ->
+            rows += Row.Action(getString(R.string.row_page_n, index + 2), url) { editPage(index) }
+        }
+        rows += Row.Action(getString(R.string.row_add_page), getString(
+            if (seconds == 0) R.string.row_add_page_sub_off else R.string.row_add_page_sub,
+        )) { addPage() }
+        return rows
+    }
+
+    private fun savePages(list: List<String>) = save(Keys.PAGES.name, list.joinToString("\n"))
+
+    private fun addPage() {
+        val add: (String) -> Unit = { url ->
+            if (savePages(Keys.splitPages(app.settings[Keys.PAGES]) + url) && app.settings[Keys.ROTATE_SECONDS] == 0) {
+                // A second page only makes sense with rotation on: suggest a sensible interval.
+                save(Keys.ROTATE_SECONDS.name, DEFAULT_ROTATE_SECONDS)
+            }
+        }
+        val type = {
+            Dialogs.input(this, getString(R.string.row_add_page), getString(R.string.edit_web_url_message), initial = "https://") { value ->
+                if (value.isNotEmpty() && value != "https://") add(if (value.contains("://")) value else "https://$value")
+            }
+        }
+        if (app.settings.isWebMode() || app.settings.haBaseUrl() == null) {
+            type()
+        } else {
+            Dialogs.list(this, getString(R.string.row_add_page), listOf(
+                getString(R.string.add_page_dashboard) to { picker.show("") { url -> add(url) } },
+                getString(R.string.add_page_type) to { type() },
+            ))
+        }
+    }
+
+    private fun editPage(index: Int) {
+        val list = Keys.splitPages(app.settings[Keys.PAGES]).toMutableList()
+        val url = list.getOrNull(index) ?: return
+        val actions = mutableListOf<Pair<String, () -> Unit>>(
+            getString(R.string.page_change) to {
+                Dialogs.input(this, getString(R.string.row_page_n, index + 2), getString(R.string.edit_web_url_message), initial = url) { value ->
+                    if (value.isNotEmpty()) savePages(list.also { it[index] = value })
+                }
+            },
+        )
+        if (index > 0) actions += getString(R.string.page_move_up) to {
+            savePages(list.also { it.add(index - 1, it.removeAt(index)) })
+        }
+        actions += getString(R.string.page_remove) to { savePages(list.also { it.removeAt(index) }) }
+        Dialogs.list(this, url, actions)
+    }
+
+    /** Setup itself offers "Keep the current set-up", so no confirmation is needed here. */
+    private fun changeMode() {
+        startActivity(Intent(this, SetupActivity::class.java))
     }
 
     private fun signInRows(): List<Row> {
@@ -420,20 +503,39 @@ class SettingsActivity : Activity() {
             choose(getString(R.string.row_remote_mode), Keys.REMOTE_MODE, Keys.REMOTE_MODES.map { remoteModeLabel(it) to it })
         },
         Row.Info(getString(R.string.row_remote_help), getString(R.string.row_remote_help_sub)),
-    )
+    ) + nightRows()
+
+    private fun nightRows(): List<Row> {
+        val from = app.settings[Keys.SCREEN_OFF_FROM]
+        val to = app.settings[Keys.SCREEN_OFF_TO]
+        val rows = mutableListOf<Row>(
+            Row.Header(getString(R.string.header_night)),
+            Row.Value(getString(R.string.row_night_from), if (from < 0) getString(R.string.value_never) else hourLabel(from)) {
+                choose(getString(R.string.row_night_from), Keys.SCREEN_OFF_FROM,
+                    listOf(getString(R.string.value_never) to -1) + (0..23).map { hourLabel(it) to it })
+            },
+        )
+        if (from >= 0) {
+            rows += Row.Value(getString(R.string.row_night_to), hourLabel(to)) {
+                choose(getString(R.string.row_night_to), Keys.SCREEN_OFF_TO, (0..23).map { hourLabel(it) to it })
+            }
+            rows += Row.Info(getString(R.string.row_night_help), getString(R.string.row_night_help_sub))
+        }
+        return rows
+    }
 
     private fun recoveryRows(): List<Row> {
         val disconnect = app.settings[Keys.RELOAD_ON_DISCONNECT_SECONDS]
         val nightly = app.settings[Keys.NIGHTLY_RELOAD_HOUR]
-        return listOf(
+        return listOfNotNull(
             Row.Toggle(getString(R.string.label_reload_on_network), null, Keys.RELOAD_ON_NETWORK),
-            Row.Value(getString(R.string.row_reload_disconnect), durationLabel(disconnect)) {
+            if (app.settings.isWebMode()) null else Row.Value(getString(R.string.row_reload_disconnect), durationLabel(disconnect)) {
                 choose(getString(R.string.row_reload_disconnect), Keys.RELOAD_ON_DISCONNECT_SECONDS,
                     listOf(0, 30, 60, 120, 300, 600).map { durationLabel(it) to it })
             },
-            Row.Value(getString(R.string.row_nightly_reload), if (nightly < 0) getString(R.string.value_never) else "%02d:00".format(nightly)) {
+            Row.Value(getString(R.string.row_nightly_reload), if (nightly < 0) getString(R.string.value_never) else hourLabel(nightly)) {
                 choose(getString(R.string.row_nightly_reload), Keys.NIGHTLY_RELOAD_HOUR,
-                    listOf(getString(R.string.value_never) to -1) + (0..23).map { "%02d:00".format(it) to it })
+                    listOf(getString(R.string.value_never) to -1) + (0..23).map { hourLabel(it) to it })
             },
             Row.Info(getString(R.string.row_recovery_always), getString(R.string.row_recovery_always_sub)),
         )
@@ -475,6 +577,9 @@ class SettingsActivity : Activity() {
     )
 
     private fun deviceRows() = listOf<Row>(
+        Row.Action(getString(R.string.row_run_setup), getString(R.string.row_run_setup_sub)) {
+            startActivity(Intent(this, SetupActivity::class.java))
+        },
         textRow(Keys.DEVICE_NAME, R.string.label_device_name, getString(R.string.edit_device_name_message)),
         secretRow(Keys.SETTINGS_PIN, R.string.label_settings_pin, numeric = true),
         Row.Header(getString(R.string.header_backup)),
@@ -485,8 +590,8 @@ class SettingsActivity : Activity() {
     private fun statusRows(): List<Row> {
         val s = app.state.toJson(this)
         val uptimeMinutes = s.optLong("app_uptime_s") / 60
-        return listOf(
-            Row.Info(getString(R.string.status_connection), s.optString("ha_connection"),
+        return listOfNotNull(
+            if (app.settings.isWebMode()) null else Row.Info(getString(R.string.status_connection), s.optString("ha_connection"),
                 if (s.optString("ha_connection") == "connected") TvUi.SUCCESS else TvUi.WARNING),
             Row.Info(getString(R.string.status_page), s.optString("url").ifEmpty { "-" }),
             Row.Info(getString(R.string.status_last_error), s.optString("last_error").ifEmpty { getString(R.string.status_none) }),
@@ -560,18 +665,20 @@ class SettingsActivity : Activity() {
         }
     )
 
+    private fun hourLabel(hour: Int) = "%02d:00".format(hour)
+
     private fun durationLabel(seconds: Int) = when {
         seconds == 0 -> getString(R.string.value_never)
         seconds < 60 -> getString(R.string.value_seconds, seconds)
-        else -> getString(R.string.value_minutes, seconds / 60)
+        seconds < 3600 || seconds % 3600 != 0 -> getString(R.string.value_minutes, seconds / 60)
+        else -> getString(R.string.value_hours, seconds / 3600)
     }
 
     // ---- dashboard picker --------------------------------------------------------------------
 
-    /** Lists HA's dashboards and panels so nobody has to type a URL with a remote. */
+    /** Asks for HA's address first if there isn't one, then lists its dashboards. */
     private fun pickDashboard() {
-        val base = app.settings.haBaseUrl()
-        if (base == null) {
+        if (app.settings.haBaseUrl() == null) {
             Dialogs.input(this, getString(R.string.row_ha_address), getString(R.string.edit_ha_url_first), initial = "http://") { value ->
                 if (save(Keys.HA_URL.name, value.trimEnd('/'))) pickDashboard()
             }
@@ -581,57 +688,7 @@ class SettingsActivity : Activity() {
             Dialogs.message(this, getString(R.string.row_pick_dashboard), getString(R.string.pick_needs_sign_in_mode))
             return
         }
-        panel.show(getString(R.string.pick_loading), busy = true)
-        val started = SystemClock.elapsedRealtime()
-        thread(name = "ha-dashboards") {
-            val outcome = runCatching { HaDashboards.list(base, app.auth.accessToken(false).accessToken) }
-            // Keep the spinner up long enough to be seen rather than flash.
-            val wait = (400 - (SystemClock.elapsedRealtime() - started)).coerceAtLeast(0)
-            main.postDelayed({ showDashboards(base, outcome) }, wait)
-        }
-    }
-
-    private fun showDashboards(base: String, outcome: Result<List<HaDashboards.Dashboard>>) {
-        if (isFinishing) return
-        outcome.onSuccess { dashboards ->
-            panel.hide()
-            if (dashboards.isEmpty()) {
-                Dialogs.message(this, getString(R.string.row_pick_dashboard), getString(R.string.pick_none))
-                return
-            }
-            val currentPath = app.settings[Keys.START_URL].substringAfter(base, "").substringBefore('?').trim('/')
-            Dialogs.list(this, getString(R.string.row_pick_dashboard), dashboards.map { d ->
-                val mark = if (d.path == currentPath) "  ✓" else ""
-                val kind = if (d.builtIn) getString(R.string.pick_built_in) else "/${d.path}"
-                "${d.title}   ·   $kind$mark" to {
-                    // Picking the page already shown keeps its options (e.g. ?tv=1).
-                    if (d.path != currentPath) save(Keys.START_URL.name, "$base/${d.path}")
-                    Unit
-                }
-            })
-        }
-        outcome.onFailure { error ->
-            if (error is HaAuth.Failure.Invalid) {
-                panel.show(
-                    getString(R.string.pick_sign_in_title), getString(R.string.pick_sign_in_message), listOf(
-                        MessagePanel.Action(getString(R.string.panel_sign_in), primary = true) {
-                            panel.hide()
-                            signIn()
-                        },
-                        MessagePanel.Action(getString(R.string.login_cancel)) { panel.hide(); focusContent() },
-                    ),
-                    iconText = MessagePanel.ICON_KEY,
-                )
-            } else {
-                panel.show(
-                    getString(R.string.pick_failed), error.message ?: "", listOf(
-                        MessagePanel.Action(getString(R.string.login_try_again), primary = true) { panel.hide(); pickDashboard() },
-                        MessagePanel.Action(getString(R.string.login_cancel)) { panel.hide(); focusContent() },
-                    ),
-                    iconText = MessagePanel.ICON_WARNING,
-                )
-            }
-        }
+        picker.show(app.settings[Keys.START_URL]) { url -> save(Keys.START_URL.name, url) }
     }
 
     // ---- sign-in -----------------------------------------------------------------------------
@@ -734,5 +791,7 @@ class SettingsActivity : Activity() {
     companion object {
         /** Index of the page to open on. */
         const val EXTRA_PAGE = "page"
+        private val ROTATE_CHOICES = listOf(15, 30, 60, 120, 300, 600, 1800, 3600)
+        private const val DEFAULT_ROTATE_SECONDS = 60
     }
 }

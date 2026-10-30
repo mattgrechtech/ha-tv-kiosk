@@ -4,6 +4,11 @@
 
 Tested on a TCL Google TV (Android 14).
 
+- First-run setup, laid out like the TV's own setup: choose Home Assistant or a web page. Home Assistant is found on the network by itself (mDNS), checked, signed in to, and a dashboard chosen, with no URL typing. "Run setup again" is in Settings.
+- Web mode: show any web page, with no Home Assistant sign-in or bridge. Home Assistant-only settings are hidden.
+- More pages: rotate through several pages (HA dashboards or any web pages) every 15 s to 1 h. Using the remote holds the current page; the quick menu has "Next page". HA pages on the same server switch instantly, without a reload.
+- Night screen: the screen goes black between set hours (pop-ups still show); any button wakes it for 5 minutes.
+- New settings: `mode`, `pages` (one URL per line, or a JSON array), `rotate_seconds`, `screen_off_from`, `screen_off_to`.
 - Restarts itself after a crash (stops after 3 crashes in 10 minutes), says so with a pop-up, and keeps the crash details.
 - A log on the TV with tokens blanked, readable in Settings > Status and about, over the API (`/api/v1/logs`, `/api/v1/diagnostics`) and over adb (`DIAGNOSTICS`).
 - Home Assistant's dashboard header is hidden too, not just the sidebar (HA's own kiosk mode only hides the sidebar).

@@ -119,4 +119,37 @@ class SettingsTest {
         SettingsJson.import(settings, JSONObject("""{"settings_pin":"2468"}"""))
         assertEquals("2468", settings[Keys.SETTINGS_PIN])
     }
+
+    @Test fun webModeHasNoHomeAssistant() {
+        settings[Keys.START_URL] = "https://calendar.test/week"
+        assertEquals("https://calendar.test", settings.haBaseUrl())
+        settings[Keys.MODE] = "web"
+        assertTrue(settings.isWebMode())
+        assertNull(settings.haBaseUrl())
+        assertEquals(listOf("https://calendar.test/week"), settings.pages())
+    }
+
+    @Test fun pagesStartWithTheStartPageOrHaHome() {
+        settings[Keys.HA_URL] = "http://ha.test:8123"
+        settings[Keys.PAGES] = "http://ha.test:8123/cameras\n\n  https://weather.test  \n"
+        assertEquals(listOf("http://ha.test:8123/", "http://ha.test:8123/cameras", "https://weather.test"), settings.pages())
+    }
+
+    @Test fun pagesMustAllBeWebAddresses() {
+        val result = SettingsJson.import(settings, JSONObject().put("pages", "https://ok.test\nftp://no.test"))
+        assertEquals(setOf("pages"), result.rejected.keys)
+        assertEquals("", settings[Keys.PAGES])
+    }
+
+    @Test fun pagesImportFromAJsonArray() {
+        val result = SettingsJson.import(settings, JSONObject("""{"pages":["https://a.test","https://b.test"],"rotate_seconds":30}"""))
+        assertTrue(result.rejected.isEmpty())
+        assertEquals(listOf("https://a.test", "https://b.test"), Keys.splitPages(settings[Keys.PAGES]))
+        assertEquals(30, settings[Keys.ROTATE_SECONDS])
+    }
+
+    @Test fun rotationAndModeAreChecked() {
+        val result = SettingsJson.import(settings, JSONObject("""{"rotate_seconds":5,"mode":"cinema","screen_off_from":24}"""))
+        assertEquals(setOf("rotate_seconds", "mode", "screen_off_from"), result.rejected.keys)
+    }
 }

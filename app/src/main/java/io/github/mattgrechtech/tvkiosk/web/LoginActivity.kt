@@ -202,6 +202,12 @@ class LoginActivity : Activity() {
 
     private fun openDashboard() {
         if (isFinishing) return
+        if (intent.getBooleanExtra(EXTRA_FOR_RESULT, false)) {
+            // First-run setup carries on with choosing a dashboard.
+            setResult(RESULT_OK)
+            finish()
+            return
+        }
         // The dashboard reloads itself when the sign-in changes; this brings it forward and closes
         // settings if sign-in was started from there.
         startActivity(Intent(this, KioskActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP))
@@ -243,8 +249,10 @@ class LoginActivity : Activity() {
         super.onDestroy()
     }
 
-    private companion object {
-        const val LOAD_TIMEOUT_MILLIS = 20_000L
-        const val SUCCESS_PAUSE_MILLIS = 1_500L
+    companion object {
+        /** Return to the caller with RESULT_OK instead of opening the dashboard. */
+        const val EXTRA_FOR_RESULT = "for_result"
+        private const val LOAD_TIMEOUT_MILLIS = 20_000L
+        private const val SUCCESS_PAUSE_MILLIS = 1_500L
     }
 }
