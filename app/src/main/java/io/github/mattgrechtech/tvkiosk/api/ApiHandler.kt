@@ -21,6 +21,7 @@ class ApiHandler(
     private val execute: (String, JSONObject) -> CommandResult,
     private val exportSettings: () -> JSONObject,
     private val importSettings: (JSONObject) -> JSONObject,
+    private val diagnostics: () -> JSONObject = { JSONObject() },
     private val clock: () -> Long = System::currentTimeMillis,
 ) : (Request) -> Response {
 
@@ -47,6 +48,15 @@ class ApiHandler(
 
         if (route == "/state") {
             return if (request.method == "GET") result(execute("state", JSONObject())) else error(405, "use GET")
+        }
+        if (route == "/diagnostics" || route == "/logs") {
+            if (request.method != "GET") return error(405, "use GET")
+            val all = diagnostics()
+            if (route == "/diagnostics") return json(200, all.put("ok", true))
+            val wanted = request.query["lines"]?.toIntOrNull()?.coerceIn(1, 500) ?: 200
+            val log = all.optJSONArray("log") ?: org.json.JSONArray()
+            val text = (maxOf(0, log.length() - wanted) until log.length()).joinToString("\n") { log.optString(it) }
+            return HttpServer.Response(200, text, "text/plain")
         }
         if (route == "/settings") {
             return when (request.method) {

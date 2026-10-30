@@ -97,6 +97,7 @@
                 <action android:name="io.github.mattgrechtech.tvkiosk.EXPORT" />
                 <action android:name="io.github.mattgrechtech.tvkiosk.GET_TOKEN" />
                 <action android:name="io.github.mattgrechtech.tvkiosk.COMMAND" />
+                <action android:name="io.github.mattgrechtech.tvkiosk.DIAGNOSTICS" />
             </intent-filter>
         </receiver>
     </application>

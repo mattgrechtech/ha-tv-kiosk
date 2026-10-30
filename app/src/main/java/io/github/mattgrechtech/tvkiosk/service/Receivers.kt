@@ -4,13 +4,14 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Base64
-import android.util.Log
 import io.github.mattgrechtech.tvkiosk.KioskApp
 import io.github.mattgrechtech.tvkiosk.settings.Keys
 import io.github.mattgrechtech.tvkiosk.settings.SettingsJson
 import io.github.mattgrechtech.tvkiosk.web.KioskActivity
 import org.json.JSONObject
 import java.io.File
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
+import io.github.mattgrechtech.tvkiosk.diag.Diagnostics
 
 /** Starts the service after boot or an app update, and the dashboard too when "Start at boot" is on. */
 class BootReceiver : BroadcastReceiver() {
@@ -24,7 +25,7 @@ class BootReceiver : BroadcastReceiver() {
                 // Allowed from the background only with "display over other apps".
                 context.startActivity(Intent(context, KioskActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             } catch (e: Exception) {
-                Log.w("BootReceiver", "Can't open the dashboard at boot", e)
+                AppLog.w("BootReceiver", "Can't open the dashboard at boot", e)
             }
         }
     }
@@ -60,6 +61,7 @@ class ProvisionReceiver : BroadcastReceiver() {
                     JSONObject().put("ok", true).put("settings", json)
                 }
                 ACTION_GET_TOKEN -> JSONObject().put("ok", true).put("token", app.settings[Keys.API_TOKEN])
+                ACTION_DIAGNOSTICS -> JSONObject().put("ok", true).put("file", Diagnostics.export(context).absolutePath)
                 ACTION_COMMAND -> {
                     val command = intent.getStringExtra("command") ?: throw IllegalArgumentException("command extra required")
                     val args = jsonExtra(intent)
@@ -70,7 +72,7 @@ class ProvisionReceiver : BroadcastReceiver() {
         } catch (e: Exception) {
             JSONObject().put("ok", false).put("error", e.message ?: e.javaClass.simpleName)
         }
-        Log.i(TAG, "${intent.action}: ${if (intent.action == ACTION_GET_TOKEN) "(token)" else result.toString()}")
+        AppLog.i(TAG, "${intent.action}: ${if (intent.action == ACTION_GET_TOKEN) "(token)" else result.toString()}")
         if (isOrderedBroadcast) {
             resultCode = if (result.optBoolean("ok")) 0 else 1
             resultData = result.toString()
@@ -90,5 +92,6 @@ class ProvisionReceiver : BroadcastReceiver() {
         const val ACTION_EXPORT = "io.github.mattgrechtech.tvkiosk.EXPORT"
         const val ACTION_GET_TOKEN = "io.github.mattgrechtech.tvkiosk.GET_TOKEN"
         const val ACTION_COMMAND = "io.github.mattgrechtech.tvkiosk.COMMAND"
+        const val ACTION_DIAGNOSTICS = "io.github.mattgrechtech.tvkiosk.DIAGNOSTICS"
     }
 }

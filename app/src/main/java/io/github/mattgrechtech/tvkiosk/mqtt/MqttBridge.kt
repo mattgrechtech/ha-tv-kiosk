@@ -1,6 +1,5 @@
 package io.github.mattgrechtech.tvkiosk.mqtt
 
-import android.util.Log
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken
 import org.eclipse.paho.client.mqttv3.MqttCallbackExtended
 import org.eclipse.paho.client.mqttv3.MqttClient
@@ -13,6 +12,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 /**
  * Connects to the MQTT broker, announces the TV to Home Assistant through discovery, publishes
@@ -97,7 +97,7 @@ class MqttBridge(
             retryDelaySeconds = 5
         } catch (e: MqttException) {
             status = "can't connect: ${e.message}"
-            Log.w(TAG, "MQTT connect failed (${e.reasonCode}); retrying in ${retryDelaySeconds}s")
+            AppLog.w(TAG, "MQTT connect failed (${e.reasonCode}); retrying in ${retryDelaySeconds}s")
             if (!stopped) {
                 // Paho's automatic reconnect only starts after a first success.
                 runCatching { scheduler.schedule(Runnable { connect() }, retryDelaySeconds, TimeUnit.SECONDS) }
@@ -114,7 +114,7 @@ class MqttBridge(
 
         override fun connectionLost(cause: Throwable?) {
             status = "disconnected: ${cause?.message ?: "unknown"}"
-            Log.w(TAG, "MQTT connection lost", cause)
+            AppLog.w(TAG, "MQTT connection lost", cause)
         }
 
         override fun messageArrived(topic: String, message: MqttMessage) {
@@ -123,14 +123,14 @@ class MqttBridge(
             if (message.isRetained) return // Never replay stale commands.
             val command = Discovery.toCommand(name, payload)
             if (command == null) {
-                Log.w(TAG, "Ignored MQTT command $name")
+                AppLog.w(TAG, "Ignored MQTT command $name")
                 return
             }
             runCatching { scheduler.execute {
                 try {
                     execute(command.first, command.second)
                 } catch (e: Exception) {
-                    Log.e(TAG, "MQTT command ${command.first} failed", e)
+                    AppLog.e(TAG, "MQTT command ${command.first} failed", e)
                 }
             } }
         }
@@ -148,7 +148,7 @@ class MqttBridge(
             mqtt.publish(discovery.availabilityTopic, Discovery.ONLINE.toByteArray(), 1, true)
             publishState()
         } catch (e: MqttException) {
-            Log.w(TAG, "MQTT announce failed", e)
+            AppLog.w(TAG, "MQTT announce failed", e)
         }
     }
 
@@ -158,7 +158,7 @@ class MqttBridge(
         try {
             mqtt.publish(discovery.stateTopic, stateJson().toString().toByteArray(Charsets.UTF_8), 0, true)
         } catch (e: Exception) {
-            Log.w(TAG, "MQTT state publish failed", e)
+            AppLog.w(TAG, "MQTT state publish failed", e)
         }
     }
 

@@ -1,13 +1,13 @@
 package io.github.mattgrechtech.tvkiosk.web
 
 import android.os.SystemClock
-import android.util.Log
 import io.github.mattgrechtech.tvkiosk.settings.Keys
 import io.github.mattgrechtech.tvkiosk.settings.Settings
 import org.json.JSONObject
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 /**
  * Supplies access tokens to HA's frontend through external auth.
@@ -104,7 +104,7 @@ class HaAuth(private val settings: Settings) {
             try {
                 post("$base/auth/revoke", HaUrls.formBody("token" to refreshToken))
             } catch (e: IOException) {
-                Log.w(TAG, "Revoking the refresh token failed; forgetting it anyway", e)
+                AppLog.w(TAG, "Revoking the refresh token failed; forgetting it anyway", e)
             }
         }
         settings.edit { clear(Keys.HA_REFRESH_TOKEN) }

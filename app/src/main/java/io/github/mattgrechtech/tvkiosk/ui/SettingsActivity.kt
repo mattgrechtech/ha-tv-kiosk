@@ -13,6 +13,7 @@ import android.os.Looper
 import android.os.SystemClock
 import android.provider.Settings as AndroidSettings
 import android.text.TextUtils
+import android.text.format.DateUtils
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -25,6 +26,9 @@ import io.github.mattgrechtech.tvkiosk.BuildConfig
 import io.github.mattgrechtech.tvkiosk.KioskApp
 import io.github.mattgrechtech.tvkiosk.R
 import io.github.mattgrechtech.tvkiosk.control.KioskState
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
+import io.github.mattgrechtech.tvkiosk.diag.CrashGuard
+import io.github.mattgrechtech.tvkiosk.diag.Diagnostics
 import io.github.mattgrechtech.tvkiosk.settings.Key
 import io.github.mattgrechtech.tvkiosk.settings.Keys
 import io.github.mattgrechtech.tvkiosk.settings.SettingsJson
@@ -494,6 +498,18 @@ class SettingsActivity : Activity() {
             Row.Info(getString(R.string.status_uptime), getString(R.string.status_uptime_value, uptimeMinutes / 60, uptimeMinutes % 60)),
             Row.Info(getString(R.string.status_versions), getString(R.string.status_versions_value,
                 BuildConfig.VERSION_NAME, s.optString("webview_version"), s.optString("android_version"), s.optString("model"))),
+            CrashGuard.lastCrash(this)?.let { crash ->
+                Row.Info(getString(R.string.status_last_crash),
+                    DateUtils.getRelativeTimeSpanString(crash.atMillis).toString() + " · " + crash.summary, TvUi.WARNING)
+            } ?: Row.Info(getString(R.string.status_last_crash), getString(R.string.status_none)),
+            Row.Header(getString(R.string.header_troubleshooting)),
+            Row.Action(getString(R.string.row_show_log), getString(R.string.row_show_log_sub)) {
+                Dialogs.message(this, getString(R.string.row_show_log), AppLog.recent(60).joinToString("\n"))
+            },
+            Row.Action(getString(R.string.row_save_diagnostics), getString(R.string.row_save_diagnostics_sub)) {
+                val file = Diagnostics.export(this)
+                Dialogs.message(this, getString(R.string.row_save_diagnostics), getString(R.string.diagnostics_saved, file.absolutePath))
+            },
         )
     }
 

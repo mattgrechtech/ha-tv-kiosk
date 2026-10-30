@@ -5,12 +5,12 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
-import android.util.Log
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 class PrefsStore(private val prefs: SharedPreferences) : KeyValueStore {
     override fun getString(key: String): String? = prefs.getString(key, null)
@@ -37,7 +37,7 @@ class EncryptedStore(private val prefs: SharedPreferences) : KeyValueStore {
             cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, bytes, 0, IV_LENGTH))
             String(cipher.doFinal(bytes, IV_LENGTH, bytes.size - IV_LENGTH), Charsets.UTF_8)
         } catch (e: Exception) {
-            Log.w(TAG, "Can't decrypt $key; treating it as unset", e)
+            AppLog.w(TAG, "Can't decrypt $key; treating it as unset", e)
             null
         }
     }

@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings as AndroidSettings
 import android.speech.tts.TextToSpeech
-import android.util.Log
 import io.github.mattgrechtech.tvkiosk.overlay.Popup
 import io.github.mattgrechtech.tvkiosk.overlay.PopupManager
 import io.github.mattgrechtech.tvkiosk.settings.Keys
@@ -19,6 +18,7 @@ import org.json.JSONObject
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 /** What the dashboard activity offers to the controller while it exists. */
 interface DashboardSurface {
@@ -66,7 +66,7 @@ class KioskController(
             result = try {
                 execute(name, args)
             } catch (e: Exception) {
-                Log.e(TAG, "Command $name failed", e)
+                AppLog.e(TAG, "Command $name failed", e)
                 CommandResult.error(500, e.message ?: e.javaClass.simpleName)
             }
             done.countDown()
@@ -75,7 +75,13 @@ class KioskController(
         else CommandResult.error(504, "timed out")
     }
 
-    fun execute(name: String, args: JSONObject): CommandResult = when (name) {
+    fun execute(name: String, args: JSONObject): CommandResult {
+        val result = dispatch(name, args)
+        AppLog.i(TAG, "Command $name -> ${result.status}" + (result.body.optString("error").takeIf { it.isNotEmpty() }?.let { ": $it" } ?: ""))
+        return result
+    }
+
+    private fun dispatch(name: String, args: JSONObject): CommandResult = when (name) {
         "state" -> CommandResult.ok(state.toJson(context))
         "url" -> loadUrl(args)
         "start_page" -> {
@@ -174,7 +180,7 @@ class KioskController(
             context.startActivity(intent)
             state.dashboardVisible || AndroidSettings.canDrawOverlays(context)
         } catch (e: Exception) {
-            Log.w(TAG, "Can't start the dashboard", e)
+            AppLog.w(TAG, "Can't start the dashboard", e)
             false
         }
     }
@@ -242,7 +248,7 @@ class KioskController(
                         language?.let { tts?.setLanguage(Locale.forLanguageTag(it)) }
                         tts?.speak(message, TextToSpeech.QUEUE_ADD, null, "say-first")
                     } else {
-                        Log.w(TAG, "No text-to-speech engine available (status $status)")
+                        AppLog.w(TAG, "No text-to-speech engine available (status $status)")
                         state.update { error("No text-to-speech engine on this TV; send a sound URL instead") }
                         tts?.shutdown()
                         tts = null

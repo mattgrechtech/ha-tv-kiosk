@@ -4,6 +4,8 @@ import android.app.Application
 import android.os.Build
 import io.github.mattgrechtech.tvkiosk.control.KioskController
 import io.github.mattgrechtech.tvkiosk.control.KioskState
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
+import io.github.mattgrechtech.tvkiosk.diag.CrashGuard
 import io.github.mattgrechtech.tvkiosk.service.KioskService
 import io.github.mattgrechtech.tvkiosk.settings.Keys
 import io.github.mattgrechtech.tvkiosk.settings.Settings
@@ -24,6 +26,9 @@ class KioskApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.init(this)
+        CrashGuard.install(this)
+        AppLog.i("KioskApp", "Started ${BuildConfig.VERSION_NAME} on ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE}")
         settings = createSettings(this)
         ensureIdentity(settings)
         state = KioskState()

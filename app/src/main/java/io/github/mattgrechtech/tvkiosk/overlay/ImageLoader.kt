@@ -3,11 +3,11 @@ package io.github.mattgrechtech.tvkiosk.overlay
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.util.Base64
-import android.util.Log
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.Executors
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 /** Loads pop-up images from a URL, base64 or a data: URI, off the main thread. */
 object ImageLoader {
@@ -28,7 +28,7 @@ object ImageLoader {
         }
         bytes?.let { decode(it, maxSidePx) }
     } catch (e: Exception) {
-        Log.w(TAG, "Can't load image: ${e.message}")
+        AppLog.w(TAG, "Can't load image: ${e.message}")
         null
     }
 
@@ -39,7 +39,7 @@ object ImageLoader {
         connection.instanceFollowRedirects = true
         try {
             if (connection.responseCode !in 200..299) {
-                Log.w(TAG, "Image request returned ${connection.responseCode}")
+                AppLog.w(TAG, "Image request returned ${connection.responseCode}")
                 return null
             }
             connection.inputStream.use { input ->
@@ -50,7 +50,7 @@ object ImageLoader {
                     if (read < 0) break
                     out.write(buffer, 0, read)
                     if (out.size() > MAX_BYTES) {
-                        Log.w(TAG, "Image larger than ${MAX_BYTES / 1024 / 1024} MB, skipped")
+                        AppLog.w(TAG, "Image larger than ${MAX_BYTES / 1024 / 1024} MB, skipped")
                         return null
                     }
                 }

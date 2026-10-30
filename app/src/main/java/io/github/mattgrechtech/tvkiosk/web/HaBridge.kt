@@ -3,7 +3,6 @@ package io.github.mattgrechtech.tvkiosk.web
 import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.webkit.WebViewCompat
@@ -12,6 +11,7 @@ import io.github.mattgrechtech.tvkiosk.BuildConfig
 import io.github.mattgrechtech.tvkiosk.settings.Settings
 import org.json.JSONObject
 import java.util.concurrent.Executors
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 /**
  * The bridge HA's frontend uses to talk to an app that embeds it: external auth (tokens) and the
@@ -66,7 +66,15 @@ class HaBridge(
         busReady = false
     }
 
-    fun setKioskMode(enable: Boolean) = sendCommand("kiosk_mode/set", JSONObject().put("enable", enable))
+    /**
+     * HA's own kiosk mode hides the sidebar; the dashboard's header (title, edit and assist
+     * buttons) stays, so a small watcher in the page hides that too, again after every redraw
+     * or dashboard change, until turned off.
+     */
+    fun setKioskMode(enable: Boolean) {
+        if (busReady) sendCommand("kiosk_mode/set", JSONObject().put("enable", enable))
+        evaluate(HEADER_SCRIPT.replace("__ENABLE__", enable.toString()))
+    }
 
     fun navigate(path: String): Boolean {
         if (!busReady) return false
@@ -82,7 +90,7 @@ class HaBridge(
         val message = try {
             JSONObject(data)
         } catch (e: Exception) {
-            Log.w(TAG, "Unreadable bridge message")
+            AppLog.w(TAG, "Unreadable bridge message")
             return
         }
         val payload = message.optJSONObject("payload") ?: JSONObject()
@@ -111,7 +119,7 @@ class HaBridge(
 
         private fun trusted(): Boolean {
             val ok = pageOrigin == haOrigin
-            if (!ok) Log.w(TAG, "Ignored a bridge call from a page that isn't Home Assistant")
+            if (!ok) AppLog.w(TAG, "Ignored a bridge call from a page that isn't Home Assistant")
             return ok
         }
 
@@ -125,7 +133,7 @@ class HaBridge(
     private fun getExternalAuth(payload: JSONObject) {
         val callback = payload.optString("callback")
         if (callback != AUTH_CALLBACK) {
-            Log.w(TAG, "Unexpected auth callback name, ignored")
+            AppLog.w(TAG, "Unexpected auth callback name, ignored")
             return
         }
         val force = payload.optBoolean("force", false)
@@ -176,8 +184,17 @@ class HaBridge(
             }
             "frontend/loaded" -> events.onFrontendLoaded()
             "config_screen/show" -> events.onShowSettings()
-            "result" -> if (!message.optBoolean("success", true)) {
-                Log.i(TAG, "Frontend refused command $id: ${message.optJSONObject("error")}")
+            "result" -> {
+                val sent = pending.remove(id)
+                if (!message.optBoolean("success", true)) {
+                    val code = message.optJSONObject("error")?.optString("code")
+                    // "unknown_command" means the frontend's handler isn't registered yet: try again.
+                    if (code == "unknown_command" && sent != null && sent.attempt < MAX_ATTEMPTS) {
+                        main.postDelayed({ sendCommand(sent.command, sent.payload, sent.attempt + 1) }, RETRY_MILLIS)
+                    } else {
+                        AppLog.i(TAG, "Frontend refused ${sent?.command ?: "command $id"}: ${message.optJSONObject("error")}")
+                    }
+                }
             }
             // Everything else (haptics, barcode, Matter, more-info events...) doesn't apply to a TV.
         }
@@ -187,8 +204,16 @@ class HaBridge(
         sendRaw(JSONObject().put("id", id).put("type", "result").put("success", true).put("result", result))
     }
 
-    private fun sendCommand(command: String, payload: JSONObject) {
-        sendRaw(JSONObject().put("id", nextId++).put("type", "command").put("command", command).put("payload", payload))
+    private class Sent(val command: String, val payload: JSONObject, val attempt: Int)
+
+    /** Commands waiting for their result, by id, so refused ones can be retried. */
+    private val pending = mutableMapOf<Int, Sent>()
+
+    private fun sendCommand(command: String, payload: JSONObject, attempt: Int = 1) {
+        val id = nextId++
+        pending[id] = Sent(command, payload, attempt)
+        if (pending.size > 50) pending.keys.sorted().take(pending.size - 50).forEach { pending.remove(it) }
+        sendRaw(JSONObject().put("id", id).put("type", "command").put("command", command).put("payload", payload))
     }
 
     private fun sendRaw(message: JSONObject) {
@@ -206,5 +231,35 @@ class HaBridge(
         const val TAG = "HaBridge"
         const val AUTH_CALLBACK = "externalAuthSetToken"
         const val REVOKE_CALLBACK = "externalAuthRevokeToken"
+        const val MAX_ATTEMPTS = 10
+
+        /** Hides (or shows again) every dashboard header, now and whenever one is redrawn. */
+        const val HEADER_SCRIPT = """
+(function (enable) {
+  function each(root, fn) {
+    var all = root.querySelectorAll('*');
+    for (var i = 0; i < all.length; i++) { fn(all[i]); if (all[i].shadowRoot) each(all[i].shadowRoot, fn); }
+  }
+  function apply() {
+    each(document, function (el) {
+      if (el.tagName !== 'HUI-ROOT' || !el.shadowRoot) return;
+      var style = el.shadowRoot.getElementById('tvkiosk-hide-header');
+      if (enable && !style) {
+        style = document.createElement('style');
+        style.id = 'tvkiosk-hide-header';
+        style.textContent = '.header { display: none !important; } #view { padding-top: 0 !important; min-height: 100vh !important; }';
+        el.shadowRoot.appendChild(style);
+      } else if (!enable && style) {
+        style.remove();
+      }
+    });
+  }
+  if (window.__tvkioskHeader) { clearInterval(window.__tvkioskHeader); window.__tvkioskHeader = null; }
+  apply();
+  if (enable) window.__tvkioskHeader = setInterval(apply, 2000);
+  return true;
+})(__ENABLE__)
+"""
+        const val RETRY_MILLIS = 700L
     }
 }

@@ -12,7 +12,6 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.util.Log
 import io.github.mattgrechtech.tvkiosk.BuildConfig
 import io.github.mattgrechtech.tvkiosk.KioskApp
 import io.github.mattgrechtech.tvkiosk.R
@@ -26,6 +25,8 @@ import io.github.mattgrechtech.tvkiosk.settings.Keys
 import io.github.mattgrechtech.tvkiosk.settings.SettingsJson
 import io.github.mattgrechtech.tvkiosk.web.KioskActivity
 import java.io.IOException
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
+import io.github.mattgrechtech.tvkiosk.diag.Diagnostics
 
 /**
  * Keeps the control channels running while other apps are on screen: the REST API, the
@@ -91,6 +92,7 @@ class KioskService : Service() {
                 execute = { name, args -> controller.executeBlocking(name, args) },
                 exportSettings = { SettingsJson.export(settings, includeSecrets = false) },
                 importSettings = { json -> SettingsJson.import(settings, json).toJson() },
+                diagnostics = { Diagnostics.collect(this) },
             )
             api = startServer(settings[Keys.API_PORT], handler, "API")
         }
@@ -132,10 +134,10 @@ class KioskService : Service() {
         val server = HttpServer(port, handler)
         return try {
             server.start()
-            Log.i(TAG, "$label listening on port $port")
+            AppLog.i(TAG, "$label listening on port $port")
             server
         } catch (e: IOException) {
-            Log.e(TAG, "$label can't listen on port $port", e)
+            AppLog.e(TAG, "$label can't listen on port $port", e)
             app.state.update { error("$label can't use port $port: ${e.message}") }
             null
         }
@@ -194,7 +196,7 @@ class KioskService : Service() {
             } catch (e: Exception) {
                 // Android 12+ refuses to start a foreground service from the background (on 15,
                 // even with "display over other apps"); the dashboard starts it on resume instead.
-                Log.w(TAG, "Can't start the service now: ${e.message}")
+                AppLog.w(TAG, "Can't start the service now: ${e.message}")
             }
         }
     }

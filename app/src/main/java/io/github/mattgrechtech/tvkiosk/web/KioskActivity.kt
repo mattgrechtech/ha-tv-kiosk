@@ -11,7 +11,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
-import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.KeyEvent
@@ -41,6 +40,8 @@ import io.github.mattgrechtech.tvkiosk.ui.Dialogs
 import io.github.mattgrechtech.tvkiosk.ui.MessagePanel
 import io.github.mattgrechtech.tvkiosk.ui.SettingsActivity
 import java.util.Calendar
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
+import io.github.mattgrechtech.tvkiosk.diag.CrashGuard
 
 /**
  * The dashboard: one full-screen WebView showing Home Assistant, kept alive.
@@ -123,6 +124,15 @@ class KioskActivity : Activity(), DashboardSurface {
 
         applyScreen(app.state.screen, app.state.dimLevel)
         startDashboard()
+        if (CrashGuard.takeUnseen(this)) {
+            CrashGuard.clearGaveUp(this)
+            app.controller.execute("notify", org.json.JSONObject()
+                .put("id", "restarted")
+                .put("title", getString(R.string.crash_restarted_title))
+                .put("message", getString(R.string.crash_restarted_message))
+                .put("icon", "mdi:alert")
+                .put("duration", 8))
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -232,7 +242,7 @@ class KioskActivity : Activity(), DashboardSurface {
     }
 
     private fun recreate(reason: String) {
-        Log.w(TAG, "Recreating the WebView: $reason")
+        AppLog.w(TAG, "Recreating the WebView: $reason")
         app.state.update { reloaded(reason) }
         createWebView()
         requestedUrl?.let { open(it) }
@@ -266,6 +276,9 @@ class KioskActivity : Activity(), DashboardSurface {
         }
 
         override fun onPageFinished(view: WebView, url: String) {
+            AppLog.i(TAG, "Page loaded" + if (mainFrameFailed) " (with an error)" else "")
+            // Also when HA handles its own sign-in (no bus events): hide the header on load.
+            if (!mainFrameFailed && app.settings[Keys.HA_KIOSK_MODE]) bridge?.setKioskMode(true)
             if (!mainFrameFailed) {
                 retryDelayIndex = 0
                 hidePanel(unless = Panel.SIGN_IN)
@@ -286,7 +299,7 @@ class KioskActivity : Activity(), DashboardSurface {
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
-            Log.e(TAG, "WebView renderer gone (crashed: ${detail.didCrash()})")
+            AppLog.e(TAG, "WebView renderer gone (crashed: ${detail.didCrash()})")
             if (view !== webView) return true
             app.state.update { error(if (detail.didCrash()) "Renderer crashed" else "Renderer stopped by the system") }
             // The old WebView is unusable: replace it on the next loop.
@@ -308,7 +321,7 @@ class KioskActivity : Activity(), DashboardSurface {
     }
 
     private val retry = Runnable {
-        Log.i(TAG, "Retrying the dashboard")
+        AppLog.i(TAG, "Retrying the dashboard")
         app.state.update { reloaded("retry after error") }
         requestedUrl?.let { open(it) }
     }
@@ -365,7 +378,7 @@ class KioskActivity : Activity(), DashboardSurface {
     }
 
     private val disconnectedTooLong = Runnable {
-        Log.w(TAG, "HA connection down too long; reloading")
+        AppLog.w(TAG, "HA connection down too long; reloading")
         reload(false, "HA connection lost")
     }
 
@@ -429,7 +442,7 @@ class KioskActivity : Activity(), DashboardSurface {
         try {
             getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(networkCallback)
         } catch (e: Exception) {
-            Log.w(TAG, "Can't watch the network", e)
+            AppLog.w(TAG, "Can't watch the network", e)
         }
     }
 

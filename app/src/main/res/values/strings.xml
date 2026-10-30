@@ -185,5 +185,14 @@
     <string name="pick_sign_in_title">Sign in first</string>
     <string name="pick_sign_in_message">This TV needs to be signed in to Home Assistant to list your dashboards.</string>
     <string name="pick_built_in">Home Assistant page</string>
+    <string name="crash_restarted_title">Restarted after a problem</string>
+    <string name="crash_restarted_message">The app stopped unexpectedly and reopened itself. Details are in Settings, under Status and about.</string>
+    <string name="status_last_crash">Last crash</string>
+    <string name="header_troubleshooting">Troubleshooting</string>
+    <string name="row_show_log">Show the recent log</string>
+    <string name="row_show_log_sub">What the app did lately, with tokens blanked out</string>
+    <string name="row_save_diagnostics">Save diagnostics for a bug report</string>
+    <string name="row_save_diagnostics_sub">State, settings without secrets, the last crash and the log, in one file</string>
+    <string name="diagnostics_saved">Saved to %1$s\n\nCopy it to a computer with:\nadb pull %1$s\n\nIt contains no passwords or tokens.</string>
     <string name="pick_failed">Couldn\'t load the dashboards</string>
 </resources>

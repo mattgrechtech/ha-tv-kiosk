@@ -9,7 +9,6 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
 import android.text.TextUtils
-import android.util.Log
 import android.util.TypedValue
 import android.view.Gravity
 import android.view.View
@@ -19,6 +18,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import io.github.mattgrechtech.tvkiosk.diag.AppLog
 
 /**
  * Shows [Popup]s in the screen corners. With "display over other apps" they are drawn in an
@@ -129,7 +129,7 @@ class PopupManager(private val context: Context) {
                 ).apply { setMargins(margin, margin, margin, margin) })
             }
         } catch (e: Exception) {
-            Log.e(TAG, "Can't add the pop-up container", e)
+            AppLog.e(TAG, "Can't add the pop-up container", e)
             return null
         }
         return Corner(container, inWindow).also { corners[which] = it }
@@ -141,7 +141,7 @@ class PopupManager(private val context: Context) {
             if (corner.inWindow) windowManager.removeView(corner.container)
             else (corner.container.parent as? ViewGroup)?.removeView(corner.container)
         } catch (e: Exception) {
-            Log.w(TAG, "Removing the pop-up container failed", e)
+            AppLog.w(TAG, "Removing the pop-up container failed", e)
         }
     }
 
