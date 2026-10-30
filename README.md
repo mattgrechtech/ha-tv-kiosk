@@ -1,6 +1,6 @@
-# TV Kiosk (working name)
+# TV Kiosk
 
-**A free, open-source Android TV / Google TV app that shows a Home Assistant dashboard (or any web page) full screen and lets Home Assistant control the TV.** One app instead of a kiosk browser, adb scripts and a separate pop-up app.
+**TV Kiosk for Android TV and Google TV: shows a Home Assistant dashboard, or any web page, full screen, and lets Home Assistant control the TV.** One free, open-source app instead of a kiosk browser, adb scripts and a separate pop-up app.
 
 > Status: **pre-alpha.** Tested on one TCL Google TV (Android 14), including a 72-hour run. Reports from other TVs are very welcome: see [Contributing](CONTRIBUTING.md). Companion to [ha-tv-kit](https://github.com/mattgrechtech/ha-tv-kit).
 

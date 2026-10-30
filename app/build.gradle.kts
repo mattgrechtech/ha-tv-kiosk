@@ -34,7 +34,7 @@ android {
     buildToolsVersion = "35.0.0"
 
     defaultConfig {
-        // Working ID: decide the permanent one before the first public release.
+        // Permanent: changing it makes Android treat the app as new (users would have to reinstall).
         applicationId = "io.github.mattgrechtech.tvkiosk"
         minSdk = 29
         targetSdk = 35

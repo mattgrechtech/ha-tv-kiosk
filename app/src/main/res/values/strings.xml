@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Working name: change it here, in tools/make_assets.py (banner text) and in the README. -->
+    <!-- The app name; the TV banner (tools/make_assets.py) shows it too. -->
     <string name="app_name">TV Kiosk</string>
 
     <string name="menu_reload">Reload</string>
