@@ -112,7 +112,9 @@ class PopupManager(private val context: Context) {
                     WindowManager.LayoutParams.WRAP_CONTENT,
                     WindowManager.LayoutParams.WRAP_CONTENT,
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    // Not FLAG_NOT_TOUCHABLE: Android 12+ forces such windows to 80 % opacity. The
+                    // window is only as big as its cards, and touches outside it pass through.
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                     PixelFormat.TRANSLUCENT,
                 ).apply {
                     this.gravity = gravity

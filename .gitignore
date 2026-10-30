@@ -11,3 +11,5 @@ captures/
 *.jks
 *.keystore
 keystore.properties
+# soak test logs (describe your TV and network)
+soak/
