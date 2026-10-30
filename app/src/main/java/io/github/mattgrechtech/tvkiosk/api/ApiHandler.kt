@@ -167,6 +167,8 @@ class TvOverlayCompatHandler(
             "/notify" -> {
                 if (request.method != "POST") return ApiHandler.error(405, "use POST")
                 val args = ApiHandler.body(request) ?: return ApiHandler.error(400, "body must be a JSON object")
+                // No token here, so no buttons: a button could open any page on the dashboard.
+                args.remove("actions")
                 ApiHandler.result(notify(args))
             }
             "/notify_fixed", "/set/overlay", "/set/notifications", "/set/settings", "/set/mqtt" ->

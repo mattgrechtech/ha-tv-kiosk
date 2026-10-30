@@ -4,6 +4,8 @@
 
 Tested on a TCL Google TV (Android 14).
 
+- Pop-up settings: size (small, medium, large), background opacity, larger text, default corner, time on screen and how many stack per corner, with a sample that shows each change. Each pop-up can override them (`size`, `opacity`, `text_size`).
+- Pop-up buttons (`actions`): open a Home Assistant page or a web page, or close. Back on the dashboard closes the newest pop-up first. An opt-in setting lets pop-ups with buttons take the remote over other apps while they're up. Buttons are ignored on the token-less TvOverlay-compatible port.
 - First-run setup, laid out like the TV's own setup: choose Home Assistant or a web page. Home Assistant is found on the network by itself (mDNS), checked, signed in to, and a dashboard chosen, with no URL typing. "Run setup again" is in Settings.
 - Web mode: show any web page, with no Home Assistant sign-in or bridge. Home Assistant-only settings are hidden.
 - More pages: rotate through several pages (HA dashboards or any web pages) every 15 s to 1 h. Using the remote holds the current page; the quick menu has "Next page". HA pages on the same server switch instantly, without a reload.

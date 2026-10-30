@@ -155,6 +155,7 @@ class KioskActivity : Activity(), DashboardSurface {
     override fun onResume() {
         super.onResume()
         resumed = true
+        app.controller.popups.dashboardInFront = true
         webView?.onResume()
         // The service may have been refused while the app was in the background (Android 12+).
         KioskService.start(this)
@@ -167,6 +168,7 @@ class KioskActivity : Activity(), DashboardSurface {
     override fun onPause() {
         super.onPause()
         resumed = false
+        app.controller.popups.dashboardInFront = false
         app.state.update { dashboardVisible(false) }
         main.removeCallbacks(tick)
         main.removeCallbacks(rotation)
@@ -650,7 +652,8 @@ class KioskActivity : Activity(), DashboardSurface {
             moveTaskToBack(true)
             return
         }
-        // An open Home Assistant dialog (more-info, a card's pop-up) closes first.
+        // A pop-up closes first, then an open Home Assistant dialog (more-info, a card's pop-up).
+        if (app.controller.popups.closeNewest()) return
         navigator.closeDialog { closed ->
             if (closed) return@closeDialog
             if (view.canGoBack()) view.goBack() else moveTaskToBack(true)

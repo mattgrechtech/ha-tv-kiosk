@@ -43,10 +43,29 @@ class KioskController(
     private var surface: DashboardSurface? = null
     /** A URL asked for while no dashboard existed; the activity picks it up when it starts. */
     private var pendingUrl: String? = null
-    val popups = PopupManager(context)
+    val popups = PopupManager(context).apply {
+        maxPerCorner = { settings[Keys.POPUP_MAX_PER_CORNER] }
+        takeRemote = { settings[Keys.POPUP_TAKE_REMOTE] }
+        onAction = { action -> runPopupAction(action) }
+    }
     private var tts: TextToSpeech? = null
     private var ttsReady = false
     private var player: MediaPlayer? = null
+
+    /** The pop-up settings, for anything a pop-up's payload leaves out. */
+    fun popupDefaults() = Popup.Defaults(
+        corner = Popup.Corner.parse(settings[Keys.POPUP_CORNER]) ?: Popup.Corner.TOP_END,
+        durationSeconds = settings[Keys.POPUP_DURATION],
+        size = Popup.Size.parse(settings[Keys.POPUP_SIZE]) ?: Popup.Size.MEDIUM,
+        opacity = settings[Keys.POPUP_OPACITY],
+        largeText = settings[Keys.POPUP_TEXT_SIZE] == "large",
+    )
+
+    /** A pop-up button: open a Home Assistant path or a web page on the dashboard, bringing it forward. */
+    private fun runPopupAction(action: Popup.Action) {
+        val target = action.url ?: action.navigate?.let { path -> settings.haBaseUrl()?.let { it + path } } ?: return
+        execute("url", JSONObject().put("url", target))
+    }
 
     fun attach(surface: DashboardSurface) {
         this.surface = surface
@@ -193,7 +212,7 @@ class KioskController(
     }
 
     private fun notify(args: JSONObject): CommandResult {
-        val popup = Popup.fromJson(args) ?: return CommandResult.error(400, "a title or message is required")
+        val popup = Popup.fromJson(args, popupDefaults()) ?: return CommandResult.error(400, "a title or message is required")
         return when (popups.show(popup)) {
             PopupManager.Shown.OVER_EVERYTHING -> CommandResult.ok(JSONObject().put("id", popup.id))
             PopupManager.Shown.IN_DASHBOARD -> CommandResult.ok(

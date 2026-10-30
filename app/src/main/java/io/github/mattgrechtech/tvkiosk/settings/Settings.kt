@@ -68,6 +68,17 @@ object Keys {
         if (it in -1..23) null else "must be -1 (off) or an hour 0-23"
     })
 
+    // Pop-up look and behaviour (defaults; each pop-up can override size, opacity, text, corner, duration)
+    val POPUP_SIZE = Key("popup_size", "medium", check = { if (it in POPUP_SIZES) null else "must be one of $POPUP_SIZES" })
+    /** Background opacity in percent; images always stay solid. */
+    val POPUP_OPACITY = Key("popup_opacity", 93, check = { if (it in 40..100) null else "must be 40-100" })
+    val POPUP_TEXT_SIZE = Key("popup_text_size", "normal", check = { if (it in POPUP_TEXT_SIZES) null else "must be one of $POPUP_TEXT_SIZES" })
+    val POPUP_CORNER = Key("popup_corner", "top_end", check = { if (it in POPUP_CORNERS) null else "must be one of $POPUP_CORNERS" })
+    val POPUP_DURATION = Key("popup_duration", 10, check = { if (it in 1..600) null else "must be 1-600 seconds" })
+    val POPUP_MAX_PER_CORNER = Key("popup_max_per_corner", 3, check = { if (it in 1..3) null else "must be 1-3" })
+    /** Pop-ups with buttons take the remote over other apps too (Back closes, OK presses). */
+    val POPUP_TAKE_REMOTE = Key("popup_take_remote", false)
+
     // Local API
     val API_ENABLED = Key("api_enabled", true)
     val API_PORT = Key("api_port", 2424, check = ::port)
@@ -97,6 +108,9 @@ object Keys {
     })
 
     val MODES = listOf("home_assistant", "web")
+    val POPUP_SIZES = listOf("small", "medium", "large")
+    val POPUP_TEXT_SIZES = listOf("normal", "large")
+    val POPUP_CORNERS = listOf("top_start", "top_end", "bottom_start", "bottom_end")
     val AUTH_MODES = listOf("none", "login", "token")
     val REMOTE_MODES = listOf("buttons", "pointer", "page")
 
@@ -109,6 +123,7 @@ object Keys {
     val ALL: List<Key<*>> = listOf(
         MODE, START_URL, HA_URL, AUTH_MODE, HA_KIOSK_MODE, KEEP_SCREEN_ON, BOOT_START, REMOTE_MODE,
         PAGES, ROTATE_SECONDS, SCREEN_OFF_FROM, SCREEN_OFF_TO,
+        POPUP_SIZE, POPUP_OPACITY, POPUP_TEXT_SIZE, POPUP_CORNER, POPUP_DURATION, POPUP_MAX_PER_CORNER, POPUP_TAKE_REMOTE,
         RELOAD_ON_NETWORK, RELOAD_ON_DISCONNECT_SECONDS, NIGHTLY_RELOAD_HOUR,
         API_ENABLED, API_PORT, TVOVERLAY_COMPAT, TVOVERLAY_PORT,
         MQTT_ENABLED, MQTT_HOST, MQTT_PORT, MQTT_TLS, MQTT_USER, MQTT_BASE_TOPIC, MQTT_DISCOVERY_PREFIX,

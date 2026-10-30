@@ -11,7 +11,7 @@
 - **Dashboard:** any HA dashboard full screen, signed in without typing a password on the TV, HA's header and sidebar hidden (HA's own kiosk mode, no extra card).
 - **Stays up:** retries failed loads with back-off; replaces a crashed or frozen WebView; reloads when the network comes back, when HA stays unreachable, and optionally every night.
 - **Remote-friendly:** Back goes back, then home. Hold **OK** (or press Menu) for a quick menu: reload, pointer, start page, settings. An optional on-screen **pointer** for cards that the D-pad can't reach.
-- **Pop-ups over any app:** doorbell snapshots, bin night, alerts, in any corner, stacked, replaceable by id. Speaks TvOverlay's `/notify` format.
+- **Pop-ups over any app:** doorbell snapshots, bin night, alerts, in any corner, stacked, replaceable by id, with your choice of size, opacity and text size, and optional buttons ("Open camera", "Close"). Speaks TvOverlay's `/notify` format.
 - **Home Assistant control:** load a page, navigate, reload, dim or blank the screen, wake, pop-ups, volume, speech, sounds, open another TV app, read state (page, connection, memory, uptime, WebView version).
   - **REST API** with a token, LAN only.
   - **MQTT** with HA discovery: the TV shows up as a device with buttons, a screen select, a dim slider and diagnostics.

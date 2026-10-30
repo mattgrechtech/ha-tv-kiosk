@@ -547,6 +547,7 @@ class SettingsActivity : Activity() {
             if (canOverlay) Row.Info(getString(R.string.row_overlay), getString(R.string.row_overlay_allowed), TvUi.SUCCESS)
             else Row.Action(getString(R.string.row_overlay), getString(R.string.row_overlay_missing)) { openOverlayPermission() },
             Row.Action(getString(R.string.settings_test_popup), getString(R.string.row_test_popup_sub)) { testPopup() },
+        ) + popupLookRows() + listOf(
             Row.Header(getString(R.string.section_api)),
             Row.Toggle(getString(R.string.label_api_enabled), getString(R.string.row_api_sub), Keys.API_ENABLED),
             Row.Value(getString(R.string.label_api_port), app.settings[Keys.API_PORT].toString()) {
@@ -560,6 +561,56 @@ class SettingsActivity : Activity() {
                 editNumber(Keys.TVOVERLAY_PORT, getString(R.string.label_tvoverlay_port))
             },
         )
+    }
+
+    /** How pop-ups look and behave. Each change shows a sample straight away. */
+    private fun popupLookRows(): List<Row> {
+        val s = app.settings
+        val size = s[Keys.POPUP_SIZE]
+        val opacity = s[Keys.POPUP_OPACITY]
+        val text = s[Keys.POPUP_TEXT_SIZE]
+        val corner = s[Keys.POPUP_CORNER]
+        val duration = s[Keys.POPUP_DURATION]
+        val stack = s[Keys.POPUP_MAX_PER_CORNER]
+        val sizeLabel = { v: String -> getString(when (v) { "small" -> R.string.popup_size_small; "large" -> R.string.popup_size_large; else -> R.string.popup_size_medium }) }
+        val textLabel = { v: String -> getString(if (v == "large") R.string.popup_text_large else R.string.popup_text_normal) }
+        val cornerLabel = { v: String ->
+            getString(when (v) {
+                "top_start" -> R.string.corner_top_start
+                "bottom_start" -> R.string.corner_bottom_start
+                "bottom_end" -> R.string.corner_bottom_end
+                else -> R.string.corner_top_end
+            })
+        }
+        return listOf(
+            Row.Header(getString(R.string.header_popup_look)),
+            Row.Value(getString(R.string.row_popup_size), sizeLabel(size)) {
+                chooseAndPreview(getString(R.string.row_popup_size), Keys.POPUP_SIZE, Keys.POPUP_SIZES.map { sizeLabel(it) to it })
+            },
+            Row.Value(getString(R.string.row_popup_opacity), getString(R.string.value_percent, opacity)) {
+                chooseAndPreview(getString(R.string.row_popup_opacity), Keys.POPUP_OPACITY,
+                    listOf(100, 93, 85, 75, 60).map { getString(R.string.value_percent, it) to it })
+            },
+            Row.Value(getString(R.string.row_popup_text), textLabel(text)) {
+                chooseAndPreview(getString(R.string.row_popup_text), Keys.POPUP_TEXT_SIZE, Keys.POPUP_TEXT_SIZES.map { textLabel(it) to it })
+            },
+            Row.Value(getString(R.string.row_popup_corner), cornerLabel(corner)) {
+                chooseAndPreview(getString(R.string.row_popup_corner), Keys.POPUP_CORNER, Keys.POPUP_CORNERS.map { cornerLabel(it) to it })
+            },
+            Row.Value(getString(R.string.row_popup_duration), durationLabel(duration)) {
+                chooseAndPreview(getString(R.string.row_popup_duration), Keys.POPUP_DURATION,
+                    listOf(5, 10, 15, 20, 30, 60).map { durationLabel(it) to it })
+            },
+            Row.Value(getString(R.string.row_popup_stack), stack.toString()) {
+                choose(getString(R.string.row_popup_stack), Keys.POPUP_MAX_PER_CORNER, (1..3).map { it.toString() to it })
+            },
+            Row.Toggle(getString(R.string.row_popup_take_remote), getString(R.string.row_popup_take_remote_sub), Keys.POPUP_TAKE_REMOTE),
+            Row.Info(getString(R.string.row_popup_closing), getString(R.string.row_popup_closing_sub)),
+        )
+    }
+
+    private fun <T : Any> chooseAndPreview(title: String, key: Key<T>, options: List<Pair<String, T>>) {
+        Dialogs.list(this, title, options.map { (label, value) -> label to { if (save(key.name, value)) testPopup(); Unit } })
     }
 
     private fun mqttRows() = listOf<Row>(
@@ -751,13 +802,33 @@ class SettingsActivity : Activity() {
         }
     }
 
+    /** A sample like a doorbell pop-up (a picture, an icon and a button), using the current settings. */
     private fun testPopup() {
         val result = app.controller.execute("notify", JSONObject()
+            .put("id", "sample")
             .put("title", getString(R.string.app_name))
             .put("message", getString(R.string.test_popup_message))
             .put("icon", "mdi:television")
-            .put("duration", 8))
+            .put("image", sampleImage())
+            .put("actions", org.json.JSONArray().put(JSONObject().put("label", getString(R.string.sample_button)))))
         if (!result.ok) Dialogs.message(this, getString(R.string.settings_test_popup), result.body.optString("error"))
+    }
+
+    /** A stand-in for a camera snapshot, drawn here so the sample needs no network. */
+    private fun sampleImage(): String {
+        val bitmap = android.graphics.Bitmap.createBitmap(640, 360, android.graphics.Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+        paint.shader = android.graphics.LinearGradient(0f, 0f, 640f, 360f, 0xFF37474F.toInt(), 0xFF102027.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        canvas.drawRect(0f, 0f, 640f, 360f, paint)
+        paint.shader = null
+        paint.color = 0xCCFFFFFF.toInt()
+        paint.textSize = 34f
+        paint.textAlign = android.graphics.Paint.Align.CENTER
+        canvas.drawText("📷  " + getString(R.string.sample_image_text), 320f, 192f, paint)
+        val out = java.io.ByteArrayOutputStream()
+        bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+        return "data:image/jpeg;base64," + android.util.Base64.encodeToString(out.toByteArray(), android.util.Base64.NO_WRAP)
     }
 
     private fun exportFile() = File(getExternalFilesDir(null), "settings.json")

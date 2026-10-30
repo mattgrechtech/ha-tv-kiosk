@@ -6,7 +6,9 @@ import java.util.UUID
 /**
  * A pop-up notification. Field names follow TvOverlay's `/notify` API so the same payload works
  * for both apps (`title`, `message`, `source`, `image`, `largeIcon`, `smallIcon`, `smallIconColor`,
- * `corner`, `duration`, `id`), plus the shorter `icon` and `color` used by this app's own API.
+ * `corner`, `duration`, `id`), plus the shorter `icon` and `color` used by this app's own API, and
+ * this app's `size`, `opacity`, `text_size` and `actions`. Anything not given comes from [Defaults]
+ * (the pop-up settings).
  */
 data class Popup(
     val id: String,
@@ -21,7 +23,35 @@ data class Popup(
     val color: Int?,
     val corner: Corner,
     val durationSeconds: Int,
+    val size: Size,
+    /** Background opacity, percent. */
+    val opacity: Int,
+    val largeText: Boolean,
+    val actions: List<Action>,
 ) {
+    enum class Size(val apiName: String, val widthDp: Int, val imageHeightDp: Int, val scale: Float) {
+        SMALL("small", 320, 180, 0.9f), MEDIUM("medium", 400, 225, 1f), LARGE("large", 520, 293, 1.15f);
+
+        companion object {
+            fun parse(value: String?): Size? = entries.firstOrNull { it.apiName == value?.trim()?.lowercase() }
+        }
+    }
+
+    /**
+     * A button on the pop-up. It acts on the TV only: open a Home Assistant path ([navigate]),
+     * open a web page ([url]), or, with neither, just close the pop-up.
+     */
+    data class Action(val label: String, val navigate: String?, val url: String?)
+
+    /** The pop-up settings, used for anything the payload leaves out. */
+    data class Defaults(
+        val corner: Corner = Corner.TOP_END,
+        val durationSeconds: Int = DEFAULT_DURATION,
+        val size: Size = Size.MEDIUM,
+        val opacity: Int = 93,
+        val largeText: Boolean = false,
+    )
+
     enum class Corner(val apiName: String) {
         TOP_START("top_start"), TOP_END("top_end"), BOTTOM_START("bottom_start"), BOTTOM_END("bottom_end");
 
@@ -33,14 +63,16 @@ data class Popup(
     companion object {
         const val DEFAULT_DURATION = 10
         const val MAX_DURATION = 600
+        const val MAX_ACTIONS = 3
 
         /** Returns null when there is nothing to show (no title and no message). */
-        fun fromJson(json: JSONObject): Popup? {
+        fun fromJson(json: JSONObject, defaults: Defaults = Defaults()): Popup? {
             val title = text(json, "title")
             val message = text(json, "message")
             if (title.isEmpty() && message.isEmpty()) return null
 
-            val duration = if (json.has("duration")) json.optInt("duration", DEFAULT_DURATION) else DEFAULT_DURATION
+            val duration = if (json.has("duration")) json.optInt("duration", defaults.durationSeconds) else defaults.durationSeconds
+            val opacity = if (json.has("opacity")) json.optInt("opacity", defaults.opacity) else defaults.opacity
             return Popup(
                 id = text(json, "id").ifEmpty { UUID.randomUUID().toString() },
                 title = title,
@@ -49,9 +81,34 @@ data class Popup(
                 image = firstNonBlank(json, "image", "largeIcon"),
                 icon = firstNonBlank(json, "icon", "smallIcon"),
                 color = parseColor(firstNonBlank(json, "color", "smallIconColor")),
-                corner = Corner.parse(text(json, "corner")) ?: Corner.TOP_END,
+                corner = Corner.parse(text(json, "corner")) ?: defaults.corner,
                 durationSeconds = duration.coerceIn(1, MAX_DURATION),
+                size = Size.parse(text(json, "size")) ?: defaults.size,
+                opacity = opacity.coerceIn(40, 100),
+                largeText = when (text(json, "text_size").lowercase()) {
+                    "large" -> true
+                    "normal" -> false
+                    else -> defaults.largeText
+                },
+                actions = actions(json),
             )
+        }
+
+        /** Up to [MAX_ACTIONS] buttons; ones with no label or an unsafe target are left out. */
+        private fun actions(json: JSONObject): List<Action> {
+            val array = json.optJSONArray("actions") ?: return emptyList()
+            return (0 until array.length()).mapNotNull { i ->
+                val item = array.optJSONObject(i) ?: return@mapNotNull null
+                val label = text(item, "label").take(30)
+                val navigate = text(item, "navigate").ifEmpty { null }
+                val url = text(item, "url").ifEmpty { null }
+                when {
+                    label.isEmpty() -> null
+                    navigate != null && !navigate.startsWith("/") -> null
+                    url != null && !url.startsWith("http://") && !url.startsWith("https://") -> null
+                    else -> Action(label, navigate, if (navigate == null) url else null)
+                }
+            }.take(MAX_ACTIONS)
         }
 
         /** A trimmed string field; "" when missing or JSON null (optString would give "null"). */

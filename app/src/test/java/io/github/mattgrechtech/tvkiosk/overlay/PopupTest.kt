@@ -47,6 +47,44 @@ class PopupTest {
         assertEquals("doorbell", Popup.fromJson(JSONObject("""{"title":"T","id":"doorbell"}"""))!!.id)
     }
 
+    @Test fun settingsFillInWhatThePayloadLeavesOut() {
+        val defaults = Popup.Defaults(Popup.Corner.BOTTOM_START, 20, Popup.Size.LARGE, 75, largeText = true)
+        val plain = Popup.fromJson(JSONObject("""{"title":"T"}"""), defaults)!!
+        assertEquals(Popup.Corner.BOTTOM_START, plain.corner)
+        assertEquals(20, plain.durationSeconds)
+        assertEquals(Popup.Size.LARGE, plain.size)
+        assertEquals(75, plain.opacity)
+        assertEquals(true, plain.largeText)
+
+        val own = Popup.fromJson(JSONObject("""{"title":"T","corner":"top_end","duration":5,"size":"small","opacity":10,"text_size":"normal"}"""), defaults)!!
+        assertEquals(Popup.Corner.TOP_END, own.corner)
+        assertEquals(5, own.durationSeconds)
+        assertEquals(Popup.Size.SMALL, own.size)
+        assertEquals(40, own.opacity) // never so faint it can't be read
+        assertEquals(false, own.largeText)
+    }
+
+    @Test fun buttonsActOnTheTvOnly() {
+        val popup = Popup.fromJson(JSONObject("""{"title":"T","actions":[
+            {"label":"Open camera","navigate":"/house"},
+            {"label":"Weather","url":"https://weather.test"},
+            {"label":"Bad path","navigate":"house"},
+            {"label":"Bad scheme","url":"javascript:alert(1)"},
+            {"navigate":"/no-label"},
+            {"label":"Dismiss"},
+            {"label":"Too many"}
+        ]}"""))!!
+        assertEquals(
+            listOf(
+                Popup.Action("Open camera", "/house", null),
+                Popup.Action("Weather", null, "https://weather.test"),
+                Popup.Action("Dismiss", null, null),
+            ),
+            popup.actions,
+        )
+        assertEquals(emptyList<Popup.Action>(), Popup.fromJson(JSONObject("""{"title":"T"}"""))!!.actions)
+    }
+
     @Test fun mdiNamesMapToEmoji() {
         assertEquals("📹", MdiIcons.emojiFor("mdi:cctv"))
         assertEquals("🗑️", MdiIcons.emojiFor("mdi:trash-can-outline"))

@@ -36,6 +36,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/jso
 | `GET /settings` | | Settings as JSON (no secrets) |
 | `POST /settings` | partial settings JSON | Change settings; answers which keys were applied and which were rejected |
 
+Pop-up settings: `popup_size`, `popup_opacity`, `popup_text_size`, `popup_corner`, `popup_duration`, `popup_max_per_corner` (1-3), `popup_take_remote` (true/false).
+
 Settings for what the TV shows: `mode` (`home_assistant` or `web`), `start_url`, `pages` (more pages to rotate through: one URL per line, or a JSON array), `rotate_seconds` (0 = off, else 10-86400), `screen_off_from` / `screen_off_to` (hours 0-23 when the screen goes black; `screen_off_from` -1 = never). For example `{"pages": ["http://192.168.1.50:8123/cameras"], "rotate_seconds": 60}`.
 
 Status codes: `200` done, `202` started (speech, sound), `400` bad input, `401` token, `404` unknown route, `405` wrong method, `409` can't right now (e.g. the dashboard isn't open), `421` wrong Host, `429` blocked for bad tokens.
@@ -50,15 +52,23 @@ Status codes: `200` done, `202` started (speech, sound), `400` bad input, `401` 
 | `image` | `largeIcon` | Picture across the top: URL, base64 or `data:` URI (a camera's `entity_picture` link works) |
 | `icon` | `smallIcon` | `mdi:name`, URL or base64. MDI names show as a matching emoji for now |
 | `color` | `smallIconColor` | Accent colour, `#RRGGBB` or `#AARRGGBB` |
-| `corner` | | `top_start`, `top_end` (default), `bottom_start`, `bottom_end` |
-| `duration` | | Seconds, 1–600 (default 10) |
-| `id` | | Same id replaces the pop-up on screen |
+| `corner` | | `top_start`, `top_end`, `bottom_start`, `bottom_end` |
+| `duration` | | Seconds, 1–600 |
+| `size` | | `small`, `medium`, `large` |
+| `opacity` | | Background opacity in percent, 40–100. Images and text stay solid |
+| `text_size` | | `normal` or `large` |
+| `actions` | | Up to 3 buttons: `[{"label": "Open camera", "navigate": "/lovelace/cameras"}]`. `navigate` opens a Home Assistant path, `url` opens a web page, neither just closes the pop-up. A Close button is always added |
+| `id` | | Same id replaces the pop-up on screen; `POST /notify/clear` with it closes it early |
+
+Anything left out comes from Settings → Pop-ups and API → Look and behaviour (defaults: top right, 10 s, medium, 93 %, normal text).
 
 Pop-ups appear over any app when the app may "display over other apps" (the provisioning script grants it). Without that permission they only show while the dashboard is open, and the answer includes a `warning`.
 
+**Buttons and the remote.** Pop-ups never take the remote from the app in front, with one exception: a pop-up with `actions` takes it while the dashboard is in front, and over other apps too if *Pop-ups with buttons can take the remote* is on. Then OK presses a button and Back closes the pop-up; the remote goes back as soon as it closes or times out. Back on the dashboard always closes the newest pop-up first.
+
 ### TvOverlay-compatible endpoint
 
-Off by default. When on (Settings → Local API), `POST http://<tv-ip>:5001/notify` accepts TvOverlay's fields, so automations written for TvOverlay work by changing nothing, or only the port. Like TvOverlay, it has **no token**: anyone on the network can show pop-ups, nothing else. Don't run it and TvOverlay on the same port.
+Off by default. When on (Settings → Local API), `POST http://<tv-ip>:5001/notify` accepts TvOverlay's fields, so automations written for TvOverlay work by changing nothing, or only the port. Like TvOverlay, it has **no token**: anyone on the network can show pop-ups, nothing else. For that reason `actions` are ignored there; use the token-protected `/api/v1/notify` for pop-ups with buttons. Don't run it and TvOverlay on the same port.
 
 ## State
 

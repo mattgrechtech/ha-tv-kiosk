@@ -11,6 +11,7 @@ import android.provider.Settings
 import android.text.TextUtils
 import android.util.TypedValue
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -19,18 +20,39 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import io.github.mattgrechtech.tvkiosk.diag.AppLog
+import io.github.mattgrechtech.tvkiosk.ui.TvUi
 
 /**
  * Shows [Popup]s in the screen corners. With "display over other apps" they are drawn in an
  * overlay window above any app; without it, only inside the dashboard while it is open.
- * Up to [MAX_PER_CORNER] stack in each corner; a pop-up with the id of one on screen replaces it.
+ * Up to [maxPerCorner] stack in each corner; a pop-up with the id of one on screen replaces it.
+ *
+ * Pop-ups never take the remote, except ones with buttons: while the dashboard is in front, or
+ * over other apps when [takeRemote] allows it. Then OK presses a button and Back closes the
+ * pop-up, and the remote goes back to whatever was in front as soon as it closes.
  * Main thread only.
  */
 class PopupManager(private val context: Context) {
 
+    /** How many may stack in one corner (the pop-up settings). */
+    var maxPerCorner: () -> Int = { 3 }
+    /** Whether pop-ups with buttons may take the remote from other apps. */
+    var takeRemote: () -> Boolean = { false }
+    /** Runs a pop-up button's action; the pop-up closes afterwards. */
+    var onAction: (Popup.Action) -> Unit = {}
+
+    /** Set by the dashboard: while it's in front, pop-ups with buttons always take the remote. */
+    var dashboardInFront = false
+        set(value) {
+            field = value
+            updateFocus()
+        }
+
     enum class Shown { OVER_EVERYTHING, IN_DASHBOARD, NOWHERE }
 
-    private class Corner(val container: LinearLayout, val inWindow: Boolean)
+    private class Corner(val container: LinearLayout, val inWindow: Boolean, val params: WindowManager.LayoutParams?) {
+        var focusable = false
+    }
 
     private class Entry(val popup: Popup, val view: View, val corner: Popup.Corner, val dismiss: Runnable)
 
@@ -59,7 +81,7 @@ class PopupManager(private val context: Context) {
         entries.remove(popup.id)?.let { remove(it) }
         val corner = cornerFor(popup.corner, overWindows) ?: return Shown.NOWHERE
 
-        while (corner.container.childCount >= MAX_PER_CORNER) {
+        while (corner.container.childCount >= maxPerCorner().coerceIn(1, 3)) {
             val oldest = entries.values.firstOrNull { it.corner == popup.corner } ?: break
             entries.remove(oldest.popup.id)
             remove(oldest)
@@ -75,6 +97,7 @@ class PopupManager(private val context: Context) {
         val dismiss = Runnable { entries[popup.id]?.let { if (it.view === view) clear(popup.id) } }
         entries[popup.id] = Entry(popup, view, popup.corner, dismiss)
         main.postDelayed(dismiss, popup.durationSeconds * 1000L)
+        updateFocus()
         return if (corner.inWindow) Shown.OVER_EVERYTHING else Shown.IN_DASHBOARD
     }
 
@@ -86,7 +109,41 @@ class PopupManager(private val context: Context) {
         } else {
             entries.remove(id)?.let { remove(it) }
         }
+        updateFocus()
     }
+
+    /** Closes the newest pop-up (Back on the dashboard). False when none is showing. */
+    fun closeNewest(): Boolean {
+        val newest = entries.keys.lastOrNull() ?: return false
+        clear(newest)
+        return true
+    }
+
+    /**
+     * Makes each corner window focusable while it holds a pop-up with buttons that may take the
+     * remote, and gives the newest such pop-up's first button the focus.
+     */
+    private fun updateFocus() {
+        val mayTake = dashboardInFront || takeRemote()
+        for ((which, corner) in corners) {
+            val params = corner.params ?: continue
+            val newest = entries.values.lastOrNull { it.corner == which && it.popup.actions.isNotEmpty() }
+            val want = mayTake && newest != null
+            if (want != corner.focusable) {
+                corner.focusable = want
+                params.flags = if (want) params.flags and WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE.inv()
+                else params.flags or WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                try {
+                    windowManager.updateViewLayout(corner.container, params)
+                } catch (e: Exception) {
+                    AppLog.w(TAG, "Can't change pop-up focus", e)
+                }
+            }
+            if (want) newest?.view?.let { view -> main.post { firstButton(view)?.requestFocus() } }
+        }
+    }
+
+    private fun firstButton(view: View): View? = view.findViewWithTag(FIRST_BUTTON)
 
     private fun remove(entry: Entry) {
         main.removeCallbacks(entry.dismiss)
@@ -122,6 +179,7 @@ class PopupManager(private val context: Context) {
                     y = margin
                 }
                 windowManager.addView(container, params)
+                return Corner(container, true, params).also { corners[which] = it }
             } else {
                 val frame = dashboardFrame ?: return null
                 frame.addView(container, FrameLayout.LayoutParams(
@@ -132,7 +190,7 @@ class PopupManager(private val context: Context) {
             AppLog.e(TAG, "Can't add the pop-up container", e)
             return null
         }
-        return Corner(container, inWindow).also { corners[which] = it }
+        return Corner(container, false, null).also { corners[which] = it }
     }
 
     private fun removeCorner(which: Popup.Corner) {
@@ -147,10 +205,14 @@ class PopupManager(private val context: Context) {
 
     private fun buildView(popup: Popup): View {
         val accent = popup.color ?: DEFAULT_ACCENT
+        val size = popup.size
+        val textScale = size.scale * if (popup.largeText) LARGE_TEXT else 1f
+        val width = dp(size.widthDp)
         val card = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             background = GradientDrawable().apply {
-                setColor(CARD_COLOR)
+                // Only the card fades; images and text stay solid.
+                setColor((Math.round(popup.opacity * 2.55f) shl 24) or CARD_RGB)
                 cornerRadius = dp(14).toFloat()
                 setStroke(dp(2), accent)
             }
@@ -163,7 +225,7 @@ class PopupManager(private val context: Context) {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 visibility = View.GONE
             }
-            card.addView(image, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), dp(IMAGE_HEIGHT_DP)))
+            card.addView(image, LinearLayout.LayoutParams(width, dp(size.imageHeightDp)))
             ImageLoader.load(popup.image, maxSidePx = 1280) { bitmap ->
                 main.post {
                     if (bitmap != null && image.isAttachedToWindow) {
@@ -179,17 +241,19 @@ class PopupManager(private val context: Context) {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(dp(16), dp(14), dp(18), dp(14))
         }
-        iconView(popup, accent)?.let {
-            row.addView(it, LinearLayout.LayoutParams(dp(40), dp(40)).apply { marginEnd = dp(14) })
+        val iconSize = Math.round(40 * textScale)
+        iconView(popup, accent, 26f * textScale)?.let {
+            row.addView(it, LinearLayout.LayoutParams(dp(iconSize), dp(iconSize)).apply { marginEnd = dp(14) })
         }
 
         val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
-        if (popup.title.isNotEmpty()) texts.addView(text(popup.title, 21f, Color.WHITE, bold = true, maxLines = 2))
-        if (popup.message.isNotEmpty()) texts.addView(text(popup.message, 17f, 0xFFE0E0E0.toInt(), bold = false, maxLines = 5))
-        if (popup.source.isNotEmpty()) texts.addView(text(popup.source, 13f, 0xFF9E9E9E.toInt(), bold = false, maxLines = 1))
+        if (popup.title.isNotEmpty()) texts.addView(text(popup.title, 21f * textScale, Color.WHITE, bold = true, maxLines = 2))
+        if (popup.message.isNotEmpty()) texts.addView(text(popup.message, 17f * textScale, 0xFFE0E0E0.toInt(), bold = false, maxLines = 5))
+        if (popup.source.isNotEmpty()) texts.addView(text(popup.source, 13f * textScale, 0xFF9E9E9E.toInt(), bold = false, maxLines = 1))
         row.addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
 
-        card.addView(row, LinearLayout.LayoutParams(dp(CARD_WIDTH_DP), ViewGroup.LayoutParams.WRAP_CONTENT))
+        card.addView(row, LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT))
+        if (popup.actions.isNotEmpty()) card.addView(buttons(popup, textScale), LinearLayout.LayoutParams(width, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         // Spacing between stacked cards.
         return FrameLayout(context).apply {
@@ -198,14 +262,55 @@ class PopupManager(private val context: Context) {
         }
     }
 
-    private fun iconView(popup: Popup, accent: Int): View? {
+    /**
+     * The pop-up's buttons, then "Close". Back on any of them closes the pop-up; Left and Right
+     * stay inside the row so the remote can't wander into the app underneath.
+     */
+    private fun buttons(popup: Popup, textScale: Float): View {
+        val row = LinearLayout(context).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(dp(16), 0, dp(16), dp(14))
+        }
+        val all = popup.actions.map { it.label to { onAction(it) } } + (CLOSE_LABEL to {})
+        val views = all.mapIndexed { index, (label, run) ->
+            TvUi.button(context, label, primary = index == 0) {
+                run()
+                clear(popup.id)
+            }.apply {
+                id = View.generateViewId()
+                textSize = 16f * textScale
+                minHeight = dp(44)
+                minimumHeight = dp(44)
+                setPadding(dp(18), dp(6), dp(18), dp(6))
+                if (index == 0) tag = FIRST_BUTTON
+                setOnKeyListener { _, keyCode, event ->
+                    if (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE) {
+                        if (event.action == KeyEvent.ACTION_UP) clear(popup.id)
+                        true
+                    } else false
+                }
+            }
+        }
+        views.forEachIndexed { index, button ->
+            button.nextFocusLeftId = views[maxOf(0, index - 1)].id
+            button.nextFocusRightId = views[minOf(views.lastIndex, index + 1)].id
+            button.nextFocusUpId = button.id
+            button.nextFocusDownId = button.id
+            row.addView(button, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                if (index > 0) marginStart = dp(10)
+            })
+        }
+        return row
+    }
+
+    private fun iconView(popup: Popup, accent: Int, emojiSp: Float): View? {
         val icon = popup.icon ?: return null
         if (icon.startsWith("mdi:")) {
             val emoji = MdiIcons.emojiFor(icon) ?: return null
             return TextView(context).apply {
                 text = emoji
                 gravity = Gravity.CENTER
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 26f)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, emojiSp)
             }
         }
         val image = ImageView(context).apply {
@@ -245,10 +350,10 @@ class PopupManager(private val context: Context) {
 
     private companion object {
         const val TAG = "PopupManager"
-        const val MAX_PER_CORNER = 3
-        const val CARD_WIDTH_DP = 400
-        const val IMAGE_HEIGHT_DP = 225
-        val CARD_COLOR = 0xEE1E1F22.toInt()
+        const val CARD_RGB = 0x1E1F22
+        const val LARGE_TEXT = 1.25f
+        const val FIRST_BUTTON = "first-button"
+        const val CLOSE_LABEL = "Close"
         val DEFAULT_ACCENT = 0xFF03A9F4.toInt()
     }
 }

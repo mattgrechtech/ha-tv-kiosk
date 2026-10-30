@@ -7,7 +7,7 @@ This app trusts your **local network**, like the rest of ha-tv-kit. Read this be
 | Port | What | Protection |
 |---|---|---|
 | 2424 (configurable) | REST API | Bearer token (random, 256-bit, rotatable); `Host` header must be the TV's address; 10 bad tokens per minute blocks the sender for a minute |
-| 5001 (off by default) | TvOverlay-compatible `/notify` | **None**, like TvOverlay itself. It can only show pop-ups |
+| 5001 (off by default) | TvOverlay-compatible `/notify` | **None**, like TvOverlay itself. It can only show pop-ups, and pop-up buttons (`actions`) are ignored there, so it can't make the dashboard open a page |
 | none | MQTT | Outgoing connection to your broker with its own user; TLS optional |
 
 Never forward these ports from the internet. Put visitors and untrusted gadgets on a guest Wi-Fi that can't reach your TVs.
