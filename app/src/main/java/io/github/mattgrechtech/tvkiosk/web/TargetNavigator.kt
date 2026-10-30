@@ -54,6 +54,26 @@ class TargetNavigator(context: Context, private val webView: () -> WebView?) {
         view.show(null)
     }
 
+    /** Which keys the page wants for itself right now; see [PageKeys]. */
+    enum class PageKeys { NONE, SIDEWAYS, ALL }
+
+    /**
+     * Asks the page which keys it wants: [PageKeys.ALL] when the focused element sits inside
+     * something marked `data-tvkiosk-keys="page"` (the page runs its own remote navigation),
+     * [PageKeys.SIDEWAYS] when a slider, select or text field has focus (Left and Right adjust
+     * it, Up and Down still move between items), else [PageKeys.NONE].
+     */
+    fun pageKeys(then: (PageKeys) -> Unit) {
+        val page = webView() ?: return then(PageKeys.NONE)
+        page.evaluateJavascript(PAGE_KEYS) { raw ->
+            then(when (raw?.trim('"')) {
+                "all" -> PageKeys.ALL
+                "sideways" -> PageKeys.SIDEWAYS
+                else -> PageKeys.NONE
+            })
+        }
+    }
+
     /** The page changed under us (a tap, a scroll): look again on the next key. */
     fun invalidate() {
         targetsAt = 0
@@ -316,6 +336,24 @@ class TargetNavigator(context: Context, private val webView: () -> WebView?) {
         const val CHECK_MILLIS = 2_000L
 
         /** Closes the topmost open dialog; returns true if there was one. */
+        const val PAGE_KEYS = """
+(function () {
+  var a = document.activeElement;
+  while (a && a.shadowRoot && a.shadowRoot.activeElement) a = a.shadowRoot.activeElement;
+  if (!a || a === document.body || a === document.documentElement) return '';
+  for (var n = a; n; ) {
+    if (n.getAttribute && n.getAttribute('data-tvkiosk-keys') === 'page') return 'all';
+    n = n.parentNode;
+    if (n && n.nodeType === 11) n = n.host;
+  }
+  var tag = (a.tagName || '').toLowerCase(), type = (a.type || '').toLowerCase();
+  var role = a.getAttribute && a.getAttribute('role');
+  if (tag === 'select' || tag === 'textarea' || a.isContentEditable || role === 'slider') return 'sideways';
+  if (tag === 'input' && ['button', 'submit', 'reset', 'checkbox', 'radio', 'image', 'file', 'color'].indexOf(type) < 0) return 'sideways';
+  return '';
+})()
+"""
+
         const val CLOSE_DIALOG = """
 (function () {
   var DIALOG = 'dialog[open],[role=dialog],[role=alertdialog],ha-dialog[open],ha-md-dialog[open]';

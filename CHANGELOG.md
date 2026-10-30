@@ -4,6 +4,7 @@
 
 Tested on a TCL Google TV (Android 14).
 
+- Pages can run their own remote navigation: inside an element marked `data-tvkiosk-keys="page"` the arrows, OK and Back (as Escape) go to the page. A focused slider, select or text field gets Left and Right.
 - Pop-up settings: size (small, medium, large), background opacity, larger text, default corner, time on screen and how many stack per corner, with a sample that shows each change. Each pop-up can override them (`size`, `opacity`, `text_size`).
 - Pop-up buttons (`actions`): open a Home Assistant page or a web page, or close. Back on the dashboard closes the newest pop-up first. An opt-in setting lets pop-ups with buttons take the remote over other apps while they're up. Buttons are ignored on the token-less TvOverlay-compatible port.
 - First-run setup, laid out like the TV's own setup: choose Home Assistant or a web page. Home Assistant is found on the network by itself (mDNS), checked, signed in to, and a dashboard chosen, with no URL typing. "Run setup again" is in Settings.

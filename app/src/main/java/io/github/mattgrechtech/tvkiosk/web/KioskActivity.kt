@@ -630,15 +630,41 @@ class KioskActivity : Activity(), DashboardSurface {
             return true
         }
 
-        if (!panel.isShowing) {
-            val used = when (remoteMode) {
-                "pointer" -> pointer.onKey(event)
-                "buttons" -> navigator.onKey(event)
-                else -> false
-            }
-            if (used) return true
+        if (!panel.isShowing && remoteMode == "buttons" && code in ARROWS) {
+            buttonsModeArrow(event)
+            return true
         }
+        if (!panel.isShowing && remoteMode == "pointer" && pointer.onKey(event)) return true
         return super.dispatchKeyEvent(event)
+    }
+
+    /**
+     * An arrow in "jump between buttons" mode. The page gets it instead when it asks (its own
+     * remote navigation, or a focused slider or text field); otherwise the highlight moves.
+     */
+    private fun buttonsModeArrow(event: KeyEvent) {
+        // Arrows given to the page are sent as a whole press, so the matching release is dropped.
+        if (event.action != KeyEvent.ACTION_DOWN) {
+            navigator.onKey(event)
+            return
+        }
+        navigator.pageKeys { keys ->
+            val sideways = event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT || event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+            if (keys == TargetNavigator.PageKeys.ALL || (keys == TargetNavigator.PageKeys.SIDEWAYS && sideways)) {
+                navigator.reset()
+                pressOnPage(event.keyCode)
+            } else {
+                navigator.onKey(event)
+            }
+        }
+    }
+
+    /** Sends a whole key press (down and up) straight to the page. */
+    private fun pressOnPage(code: Int) {
+        val view = webView ?: return
+        val now = SystemClock.uptimeMillis()
+        view.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_DOWN, code, 0))
+        view.dispatchKeyEvent(KeyEvent(now, now, KeyEvent.ACTION_UP, code, 0))
     }
 
     /**
@@ -652,11 +678,18 @@ class KioskActivity : Activity(), DashboardSurface {
             moveTaskToBack(true)
             return
         }
-        // A pop-up closes first, then an open Home Assistant dialog (more-info, a card's pop-up).
+        // A pop-up closes first. A page running its own remote navigation gets Back as Escape.
+        // Then an open Home Assistant dialog (more-info, a card's pop-up) closes.
         if (app.controller.popups.closeNewest()) return
-        navigator.closeDialog { closed ->
-            if (closed) return@closeDialog
-            if (view.canGoBack()) view.goBack() else moveTaskToBack(true)
+        navigator.pageKeys { keys ->
+            if (keys == TargetNavigator.PageKeys.ALL) {
+                pressOnPage(KeyEvent.KEYCODE_ESCAPE)
+                return@pageKeys
+            }
+            navigator.closeDialog { closed ->
+                if (closed) return@closeDialog
+                if (view.canGoBack()) view.goBack() else moveTaskToBack(true)
+            }
         }
     }
 
@@ -766,6 +799,7 @@ class KioskActivity : Activity(), DashboardSurface {
         const val TICK_MILLIS = 30_000L
         const val LONG_PRESS_MILLIS = 800L
         const val ROTATION_CHECK_MILLIS = 5_000L
+        val ARROWS = setOf(KeyEvent.KEYCODE_DPAD_LEFT, KeyEvent.KEYCODE_DPAD_RIGHT, KeyEvent.KEYCODE_DPAD_UP, KeyEvent.KEYCODE_DPAD_DOWN)
         val ROTATION_KEYS = setOf(Keys.PAGES.name, Keys.ROTATE_SECONDS.name)
     }
 }

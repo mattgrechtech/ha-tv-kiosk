@@ -129,3 +129,10 @@ adb shell am broadcast -n $R -a $A.COMMAND --es command reload
 ```
 
 `--es json_b64 <base64>` works wherever `--es json` does; the provisioning scripts use it because PowerShell 5.1 strips the quotes in JSON.
+
+## Remote keys and your own pages
+
+In the default "jump between buttons" remote mode, the app moves its own highlight between a page's clickable items. A page with its own remote navigation can take the keys instead:
+
+- Put `data-tvkiosk-keys="page"` on the element that holds your controls (it works through shadow roots). While focus is inside it, the arrow keys go to the page as normal key events, OK as Enter, and Back as an Escape keydown (the app doesn't go back in history). Move focus out of it, for example back to a button outside it, to hand the keys back to the app.
+- A focused slider, select or text field gets Left and Right without any marking; Up and Down still move the app's highlight.
